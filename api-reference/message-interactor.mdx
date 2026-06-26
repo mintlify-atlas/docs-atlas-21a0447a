@@ -463,11 +463,7 @@ val interactor: MessageInteractor = SceytChatUIKit.chatUIFacade.messageInteracto
   Sends a standard marker (e.g. `MarkerType.Displayed`, `MarkerType.Received`) for the specified message IDs.
 
   ```kotlin
-  interactor.markMessagesAs(
-      channelId = channelId,
-      marker    = MarkerType.Displayed,
-      ids       = *longArrayOf(msg1Id, msg2Id)
-  )
+  interactor.markMessagesAs(channelId, MarkerType.Displayed, msg1Id, msg2Id)
   ```
 
   <Expandable title="Parameters">

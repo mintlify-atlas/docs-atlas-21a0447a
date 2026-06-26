@@ -142,7 +142,7 @@ class ConversationsFragment : Fragment(R.layout.fragment_conversations) {
 Handles taps on channel rows and avatars:
 
 ```kotlin
-channelListView.setChannelClickListener(object : ChannelClickListeners() {
+channelListView.setChannelClickListener(object : ChannelClickListenersImpl() {
     override fun onChannelClick(view: View, item: ChannelListItem.ChannelItem) {
         // Default implementation opens Destination.Channel(item.channel)
         // Override to add analytics or a custom transition

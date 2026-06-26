@@ -106,9 +106,9 @@ android {
 
 If you enable code shrinking, add the following keep rule to your `proguard-rules.pro` file to prevent UIKit classes from being obfuscated:
 
-```
+```text
 # Keep all necessary classes in 'com.sceyt.chatuikit' package and its subpackages
 -keep class com.sceyt.chatuikit.** { *; }
 ```
 
-For a full discussion of shrinking options, see the **ProGuard** page in the Advanced section.
+For a full discussion of shrinking options, see the [ProGuard](/advanced/proguard) page in the Advanced section.

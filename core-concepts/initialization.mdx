@@ -1,5 +1,5 @@
 ---
-title: "Initializing the Sceyt Chat Android UIKit"
+title: "Initializing the Sceyt Chat Android UIKit in Your App"
 sidebarTitle: "Initialization"
 description: "Learn how to initialize SceytChatUIKit in your Application class, configure Koin DI integration, and understand the startup lifecycle."
 ---
@@ -122,10 +122,11 @@ SceytChatUIKit.initialize(
 
 ## Sub-objects available after initialization
 
-Once `initialize()` returns, the following top-level properties on `SceytChatUIKit` are safe to read and customize. All of them are lazily created on first access, so you can configure them at any point before (or after) the user connects.
+Once `initialize()` returns, the following top-level properties on `SceytChatUIKit` are safe to read and customize. The customizable sub-objects (`theme`, `config`, `formatters`, etc.) are lazily created on first access, so you can configure them at any point after `initialize()` completes. `chatUIFacade` is injected by Koin and is available as soon as the Koin context is started.
 
 | Property | Type | Purpose |
 |---|---|---|
+| `chatUIFacade` | `SceytChatUIFacade` | The central facade for interactors, token-expiry flows, and session management (e.g. `logOut`). Injected by Koin after `initialize()`. |
 | `theme` | `SceytChatUIKitTheme` | Colors, typography, and drawable overrides applied across all built-in screens and components. |
 | `config` | `SceytChatUIKitConfig` | Behavioral settings such as query page sizes, message edit timeout, reaction limits, and channel ordering. |
 | `formatters` | `SceytChatUIKitFormatters` | Replaces the default string formatters for dates, user names, file sizes, and other display text. |
@@ -146,5 +147,5 @@ SceytChatUIKit.chatTokenProvider              = MyTokenProvider()
 ```
 
 <Tip>
-  Because all sub-objects are `lazyVar` properties, accessing them before `initialize()` is called will succeed at the property-read level but will fail downstream when any injected dependency (like the Room database) is dereferenced. Always call `initialize()` first.
+  The customizable sub-objects (`theme`, `config`, `formatters`, `providers`, `renderers`, `notifications`, `navigator`) are `lazyVar` properties — they resolve on first access. `chatUIFacade` is Koin-injected and `chatTokenProvider`/`messageTransformer` are plain nullable vars. Regardless of the property type, always call `initialize()` before accessing any of them, because the Koin context and Room database must be set up first.
 </Tip>

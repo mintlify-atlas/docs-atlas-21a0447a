@@ -71,7 +71,7 @@ Each instance is assigned a random UUID as its `styleId` by default. This ID is 
   </Warning>
 </ResponseField>
 
-<ResponseField name="register(style: SceytComponentStyle, id: String)" type="function">
+<ResponseField name="register(style: SceytComponentStyle, id: String = style.styleId)" type="function">
   Stores the style using the provided `id`. If `id` is omitted, `style.styleId` is used as the key. This is the preferred alternative to the operator `set` when you want to store a style under its own self-assigned ID.
 
   ```kotlin

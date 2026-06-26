@@ -1,7 +1,7 @@
 ---
-title: "ProGuard Rules for Sceyt Chat Android UIKit"
+title: "ProGuard and R8 Rules for Sceyt Chat Android UIKit"
 sidebarTitle: "ProGuard"
-description: "Add the required ProGuard keep rules for Sceyt Chat Android UIKit to prevent obfuscation from stripping necessary classes."
+description: "Add the required ProGuard and R8 keep rules for Sceyt Chat Android UIKit to prevent code shrinking from stripping necessary classes."
 ---
 
 When you build a release APK or AAB with code shrinking enabled, ProGuard (or R8) renames and strips classes that it considers unused. The Sceyt Chat Android UIKit relies on reflection-based serialization, Room entity mapping, and internal class name lookups that break silently when class names are obfuscated. Adding the keep rules below ensures the UIKit continues to work correctly in minified builds.

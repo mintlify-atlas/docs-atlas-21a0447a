@@ -134,3 +134,31 @@ description: "Reference for SceytChatUIFacade: access channel, message, user, an
     </ParamField>
   </Expandable>
 </ResponseField>
+
+<ResponseField name="clearData" type="suspend fun">
+  Wipes all local state: cleans the Room database, clears shared preferences, and resets the in-memory channels cache. This is a suspend function and must be called from a coroutine or another suspend function. It is called automatically by `logOut()`.
+
+  ```kotlin
+  viewModelScope.launch {
+      SceytChatUIKit.chatUIFacade.clearData()
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="logOut" type="fun">
+  Performs a full sign-out asynchronously: cancels background sync, cancels pending `WorkManager` workers, calls `clearData()`, unregisters the Firebase push token, disconnects the `ChatClient`, resets the current user, and cancels all displayed push notifications. The optional `unregisterPushCallback` reports whether the push token was successfully removed from the server. This is the underlying implementation called by `SceytChatUIKit.logOut()`.
+
+  ```kotlin
+  SceytChatUIKit.chatUIFacade.logOut { result ->
+      if (result.isSuccess) {
+          // navigate to login screen
+      }
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="unregisterPushCallback" type="((Result<Boolean>) -> Unit)?">
+      An optional lambda invoked after the push token unregistration attempt completes. `Result.isSuccess` is `true` if the token was removed from the server.
+    </ParamField>
+  </Expandable>
+</ResponseField>

@@ -1,7 +1,7 @@
 ---
 title: "Media Handling and Resizing in Sceyt Chat Android UIKit"
 sidebarTitle: "Media Handling"
-description: "Configure image and video resizing quality, voice recorder settings, and file transfer behavior in the Sceyt Chat Android UIKit."
+description: "Configure image and video resizing quality, voice recorder settings, and file transfer behavior in the Sceyt Chat Android UIKit SDK."
 ---
 
 The Sceyt Chat Android UIKit compresses images and videos before upload, records voice messages through a built-in recorder, and manages file transfers via a dedicated foreground service. All of these subsystems are configurable through properties on `SceytChatUIKit.config`, letting you balance quality, upload speed, and storage usage for your specific use case.
@@ -76,7 +76,7 @@ The built-in voice recorder is configured via `SceytChatUIKit.config.voiceRecord
 data class VoiceRecorderConfig(
     val maxDuration: VoiceRecorderDuration = VoiceRecorderDuration.MaxDuration(5 * 60 * 1000L),
     val bitrate: Int = 32_000,
-    val samplingRate: Int = 16_000,
+    val simplingRate: Int = 16_000,
 )
 ```
 
@@ -84,7 +84,7 @@ data class VoiceRecorderConfig(
 |---|---|---|
 | `maxDuration` | 5 minutes | Either `VoiceRecorderDuration.Unlimited` or `VoiceRecorderDuration.MaxDuration(ms)` |
 | `bitrate` | 32 000 bps | Audio bitrate of the recorded voice file |
-| `samplingRate` | 16 000 Hz | Audio sampling rate |
+| `simplingRate` | 16 000 Hz | Audio sampling rate |
 
 ### Example: Allowing unlimited-length voice messages
 
@@ -97,7 +97,7 @@ SceytChatUIKit.config.voiceRecorderConfig = VoiceRecorderConfig(
 ```
 
 <Note>
-The property in `VoiceRecorderConfig` is spelled `simplingRate` (matching the source). Set it the same way you would `samplingRate`.
+The property is spelled `simplingRate` in the source (not `samplingRate`). Use the exact name shown above when constructing a custom `VoiceRecorderConfig`.
 </Note>
 
 ## Attachment Selection Limit

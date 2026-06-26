@@ -1,5 +1,5 @@
 ---
-title: "Channel Messages View — Full-Featured Chat Thread"
+title: "Channel Messages View — Full-Featured Android Chat Thread"
 sidebarTitle: "Channel Messages"
 description: "Integrate ChannelActivity or MessagesListView to display a rich message thread with reactions, replies, voice messages, polls, and media attachments."
 ---
@@ -148,16 +148,16 @@ class ChatFragment : Fragment(R.layout.fragment_chat) {
 ### MessageClickListeners
 
 ```kotlin
-messagesListView.setMessageClickListener(object : MessageClickListeners() {
-    override fun onMessageClick(view: View, item: MessageItem) {
+messagesListView.setMessageClickListener(object : MessageClickListenersImpl() {
+    override fun onMessageClick(view: View, item: MessageListItem.MessageItem) {
         // Default shows the quick-reaction popup
     }
 
-    override fun onMessageLongClick(view: View, item: MessageItem) {
+    override fun onMessageLongClick(view: View, item: MessageListItem.MessageItem) {
         // Default triggers multi-select mode
     }
 
-    override fun onReplyCountClick(view: View, item: MessageItem) {
+    override fun onReplyCountClick(view: View, item: MessageListItem.MessageItem) {
         // Default opens the reply-in-thread view
     }
 })
@@ -168,7 +168,7 @@ messagesListView.setMessageClickListener(object : MessageClickListeners() {
 Handles the actions toolbar (edit, copy, reply, forward, delete, react):
 
 ```kotlin
-messagesListView.setMessageActionsClickListener(object : MessageActionsViewClickListeners() {
+messagesListView.setMessageActionsClickListener(object : MessageActionsViewClickListenersImpl() {
     override fun onForwardMessageClick(message: SceytMessage) {
         SceytChatUIKit.navigator.navigate(context, Destination.Forward(message))
     }
@@ -182,7 +182,7 @@ messagesListView.setMessageActionsClickListener(object : MessageActionsViewClick
 ### ReactionPopupClickListeners
 
 ```kotlin
-messagesListView.setReactionPopupClickListener(object : ReactionPopupClickListeners() {
+messagesListView.setReactionPopupClickListener(object : ReactionPopupClickListenersImpl() {
     override fun onAddReaction(message: SceytMessage, key: String) {
         // key is the emoji string, e.g. "👍"
     }

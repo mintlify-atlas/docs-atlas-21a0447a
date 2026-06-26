@@ -29,7 +29,7 @@ typealias UserFormatter    = Formatter<SceytUser>
 typealias ChannelFormatter = Formatter<SceytChannel>
 ```
 
-For formatters that produce structured output (such as the combined status-and-date shown next to the last channel message), a `TypedFormatter<I, O>` variant is available that returns a typed `O` rather than `CharSequence`.
+For formatters that produce structured output (such as the combined status-and-date shown next to the last channel message), a `TypedFormatter<T, R>` variant is available that returns a typed `R` rather than `CharSequence`.
 
 ---
 
@@ -46,6 +46,10 @@ SceytChatUIKit.formatters.userNameFormatter = Formatter { context, user ->
 ---
 
 ## Formatter Reference
+
+<ResponseField name="userPresenceDateFormatter" type="Formatter<SceytUser>">
+  Formats the last-seen / presence date string shown beneath a user's name (e.g., "Last seen 2 hours ago"). Default: `DefaultUserPresenceDateFormatter`.
+</ResponseField>
 
 <ResponseField name="userNameFormatter" type="Formatter<SceytUser>">
   Formats a user's display name wherever their name appears (channel header, member lists, search results). Default: `DefaultUserNameFormatter`.
@@ -111,6 +115,10 @@ SceytChatUIKit.formatters.userNameFormatter = Formatter { context, user ->
   Formats the last message body displayed in the channel list subtitle (may include attachment type). Default: `DefaultMessageBodyWithAttachmentsFormatter`.
 </ResponseField>
 
+<ResponseField name="channelDraftLastMessageBodyFormatter" type="Formatter<DraftMessageBodyFormatterAttributes>">
+  Formats a draft message body shown as the last message in the channel list row. Default: `DefaultDraftMessageBodyWithAttachmentsFormatter`.
+</ResponseField>
+
 <ResponseField name="replyMessageBodyFormatter" type="Formatter<MessageBodyFormatterAttributes>">
   Formats the body of the message shown in the input bar reply preview. Default: `DefaultMessageBodyWithAttachmentsFormatter`.
 </ResponseField>
@@ -129,6 +137,10 @@ SceytChatUIKit.formatters.userNameFormatter = Formatter { context, user ->
 
 <ResponseField name="unsupportedMessageBodyFormatter" type="Formatter<SceytMessage>">
   Formats messages with an unrecognized type. Default: `DefaultUnsupportedMessageBodyFormatter`.
+</ResponseField>
+
+<ResponseField name="unsupportedMessageShortBodyFormatter" type="Formatter<SceytMessage>">
+  Formats a short (single-line) version of an unsupported message body, used in previews and the channel list subtitle. Default: `DefaultUnsupportedMessageBodyFormatter`.
 </ResponseField>
 
 <ResponseField name="selfDestructedMessageBodyFormatter" type="Formatter<SceytMessage>">
@@ -153,6 +165,30 @@ SceytChatUIKit.formatters.userNameFormatter = Formatter { context, user ->
 
 <ResponseField name="messageMarkerDateFormatter" type="Formatter<Date>">
   Formats the timestamp shown next to each read receipt marker in the message info screen. Default: `DefaultMessageMarkerDateFormatter`.
+</ResponseField>
+
+<ResponseField name="channelInfoAttachmentDateFormatter" type="Formatter<Date>">
+  Formats the date label shown on attachment items in the channel info media/files/voice tabs. Default: `DefaultAttachmentDateFormatter`.
+</ResponseField>
+
+<ResponseField name="channelInfoDateSeparatorFormatter" type="Formatter<Date>">
+  Formats the date separator headers between attachment groups in the channel info tabs. Default: `DefaultChannelInfoDateSeparatorFormatter`.
+</ResponseField>
+
+<ResponseField name="mediaPreviewDateFormatter" type="Formatter<Date>">
+  Formats the date string displayed in the full-screen media preview overlay. Default: `DefaultAttachmentDateFormatter`.
+</ResponseField>
+
+<ResponseField name="channelInfoFileSubtitleFormatter" type="Formatter<SceytAttachment>">
+  Formats the subtitle line shown beneath a file item in the channel info files tab (e.g., file size and date). Default: `DefaultChannelInfoFileSubtitleFormatter`.
+</ResponseField>
+
+<ResponseField name="channelInfoVoiceSubtitleFormatter" type="Formatter<SceytAttachment>">
+  Formats the subtitle line shown beneath a voice message item in the channel info voice tab. Default: `DefaultChannelInfoVoiceSubtitleFormatter`.
+</ResponseField>
+
+<ResponseField name="messageViewCountFormatter" type="Formatter<Long>">
+  Formats the view count label displayed on broadcast messages. Default: `DefaultMessageViewCountFormatter`.
 </ResponseField>
 
 <ResponseField name="mediaDurationFormatter" type="Formatter<Long>">
@@ -193,6 +229,10 @@ SceytChatUIKit.formatters.userNameFormatter = Formatter { context, user ->
 
 <ResponseField name="pollResultVoteCountFormatter" type="Formatter<Int>">
   Formats the total vote count shown in poll results. Default: `DefaultPollResultVoteCountFormatter`.
+</ResponseField>
+
+<ResponseField name="pollVoteDateFormatter" type="Formatter<Long>">
+  Formats the date/time a vote was cast, displayed in the poll vote details screen. Default: `DefaultPollVoteTimeDateFormatter`.
 </ResponseField>
 
 <ResponseField name="connectionStateTitleFormatter" type="Formatter<ConnectionState>">
