@@ -1,0 +1,576 @@
+---
+title: "MessageInteractor — Message Operations API Reference"
+sidebarTitle: "MessageInteractor"
+description: "Full method reference for MessageInteractor: load, send, edit, delete messages, search, handle reactions, markers, and thread replies."
+---
+
+`MessageInteractor` is the primary interface for all message-level operations in the Sceyt Chat Android UIKit. It is accessible via `SceytChatUIKit.chatUIFacade.messageInteractor`. Nearly all methods are `suspend` functions. Paginated loading methods return `Flow<PaginationResponse<SceytMessage>>`, which emits a database result first and then updates from the server. One-shot operations return `SceytResponse<T>` — a sealed class with `Success` and `Error` variants. Thread replies are supported throughout by passing `replyInThread = true` and using the parent message ID as the `conversationId`.
+
+**Package:** `com.sceyt.chatuikit.persistence.interactor`
+
+```kotlin
+val interactor: MessageInteractor = SceytChatUIKit.chatUIFacade.messageInteractor
+```
+
+---
+
+## Loading Messages
+
+<ResponseField name="loadPrevMessages" type="suspend fun → Flow&lt;PaginationResponse&lt;SceytMessage&gt;&gt;">
+  Loads messages older than `lastMessageId` (backwards pagination). Emits cached messages immediately, then emits the server response once available.
+
+  ```kotlin
+  interactor.loadPrevMessages(
+      conversationId = channelId,
+      lastMessageId  = oldestVisibleMessageId,
+      replyInThread  = false,
+      offset         = 0,
+      limit          = 50,
+      loadKey        = LoadKeyData(),
+      ignoreDb       = false
+  ).collect { response -> /* render */ }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      Channel ID, or the parent message ID when `replyInThread` is `true`.
+    </ParamField>
+    <ParamField path="lastMessageId" type="Long" required>
+      The ID of the oldest message currently loaded. Older messages are fetched relative to this.
+    </ParamField>
+    <ParamField path="replyInThread" type="Boolean" required>
+      Pass `true` to load thread replies; `false` for the main conversation.
+    </ParamField>
+    <ParamField path="offset" type="Int" required>
+      Zero-based count of messages already loaded in this direction.
+    </ParamField>
+    <ParamField path="limit" type="Int">
+      Maximum number of messages to fetch. Defaults to `config.queryLimits.messageListQueryLimit`.
+    </ParamField>
+    <ParamField path="loadKey" type="LoadKeyData" required>
+      Deduplication and correlation key for the request.
+    </ParamField>
+    <ParamField path="ignoreDb" type="Boolean">
+      When `true`, bypasses the local database. Default: `false`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="loadNextMessages" type="suspend fun → Flow&lt;PaginationResponse&lt;SceytMessage&gt;&gt;">
+  Loads messages newer than `lastMessageId` (forward pagination). Use this to scroll towards newer messages when the user is not at the bottom of the conversation.
+
+  ```kotlin
+  interactor.loadNextMessages(
+      conversationId = channelId,
+      lastMessageId  = newestLoadedMessageId,
+      replyInThread  = false,
+      offset         = 0,
+      limit          = 50,
+      ignoreDb       = false
+  ).collect { response -> /* render */ }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      Channel ID, or thread parent message ID.
+    </ParamField>
+    <ParamField path="lastMessageId" type="Long" required>
+      The ID of the newest message currently loaded.
+    </ParamField>
+    <ParamField path="replyInThread" type="Boolean" required>
+      Pass `true` for thread replies.
+    </ParamField>
+    <ParamField path="offset" type="Int" required>
+      Zero-based count of messages already loaded in this direction.
+    </ParamField>
+    <ParamField path="limit" type="Int">
+      Maximum number of messages to fetch. Defaults to `config.queryLimits.messageListQueryLimit`.
+    </ParamField>
+    <ParamField path="ignoreDb" type="Boolean">
+      When `true`, bypasses the local database. Default: `false`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="loadNearMessages" type="suspend fun → Flow&lt;PaginationResponse&lt;SceytMessage&gt;&gt;">
+  Loads messages surrounding a specific `messageId` — useful for scrolling to a search result or a mention deep inside the history. Fetches both older and newer messages around the anchor.
+
+  ```kotlin
+  interactor.loadNearMessages(
+      conversationId = channelId,
+      messageId      = targetMessageId,
+      replyInThread  = false,
+      limit          = 50,
+      loadKey        = LoadKeyData(),
+      ignoreDb       = false,
+      ignoreServer   = false
+  ).collect { response -> /* render */ }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      Channel ID, or thread parent message ID.
+    </ParamField>
+    <ParamField path="messageId" type="Long" required>
+      The ID of the anchor message around which to load context.
+    </ParamField>
+    <ParamField path="replyInThread" type="Boolean" required>
+      Pass `true` for thread replies.
+    </ParamField>
+    <ParamField path="limit" type="Int" required>
+      Number of messages to load on each side of the anchor.
+    </ParamField>
+    <ParamField path="loadKey" type="LoadKeyData" required>
+      Deduplication key for the request.
+    </ParamField>
+    <ParamField path="ignoreDb" type="Boolean">
+      When `true`, skips the local database. Default: `false`.
+    </ParamField>
+    <ParamField path="ignoreServer" type="Boolean">
+      When `true`, only returns local data without a server call. Default: `false`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="loadNewestMessages" type="suspend fun → Flow&lt;PaginationResponse&lt;SceytMessage&gt;&gt;">
+  Loads the most recent messages in a conversation. Use this as the initial load when opening a channel.
+
+  ```kotlin
+  interactor.loadNewestMessages(
+      conversationId = channelId,
+      replyInThread  = false,
+      limit          = 50,
+      loadKey        = LoadKeyData(),
+      ignoreDb       = false
+  ).collect { response -> /* render */ }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      Channel ID, or thread parent message ID.
+    </ParamField>
+    <ParamField path="replyInThread" type="Boolean" required>
+      Pass `true` for thread replies.
+    </ParamField>
+    <ParamField path="limit" type="Int">
+      Maximum number of messages to load. Defaults to `config.queryLimits.messageListQueryLimit`.
+    </ParamField>
+    <ParamField path="loadKey" type="LoadKeyData" required>
+      Deduplication key for the request.
+    </ParamField>
+    <ParamField path="ignoreDb" type="Boolean" required>
+      When `true`, bypasses the local database and fetches fresh data from the server.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Searching Messages
+
+<ResponseField name="searchMessages" type="suspend fun → SceytPagingResponse&lt;List&lt;SceytMessage&gt;&gt;">
+  Performs a full-text search in a conversation. Returns the first page of matching messages. Call `loadNextSearchMessages()` to paginate through additional results.
+
+  ```kotlin
+  val result = interactor.searchMessages(
+      conversationId = channelId,
+      replyInThread  = false,
+      query          = "hello world"
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      The channel ID to search within.
+    </ParamField>
+    <ParamField path="replyInThread" type="Boolean" required>
+      Pass `true` to search within a thread.
+    </ParamField>
+    <ParamField path="query" type="String" required>
+      The search text to match against message bodies.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="loadNextSearchMessages" type="suspend fun → SceytPagingResponse&lt;List&lt;SceytMessage&gt;&gt;">
+  Loads the next page of results from the most recent `searchMessages` call. Must be called after `searchMessages` has returned successfully.
+
+  ```kotlin
+  val nextPage = interactor.loadNextSearchMessages()
+  ```
+</ResponseField>
+
+---
+
+## Unread Mentions
+
+<ResponseField name="getUnreadMentions" type="suspend fun → SceytPagingResponse&lt;List&lt;Long&gt;&gt;">
+  Returns a page of message IDs where the current user has been mentioned and has not yet read, relative to `messageId` in the specified `direction`.
+
+  ```kotlin
+  val mentions = interactor.getUnreadMentions(
+      conversationId = channelId,
+      direction      = Direction.Prev,
+      messageId      = latestReadMessageId,
+      limit          = 30
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      The channel ID to query.
+    </ParamField>
+    <ParamField path="direction" type="Direction" required>
+      `Direction.Prev` for older mentions, `Direction.Next` for newer.
+    </ParamField>
+    <ParamField path="messageId" type="Long" required>
+      Anchor message ID for directional pagination.
+    </ParamField>
+    <ParamField path="limit" type="Int">
+      Number of mention IDs to return per page. Defaults to `config.queryLimits.unreadMentionsListQueryLimit`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Fetching Messages by ID
+
+<ResponseField name="loadMessagesById" type="suspend fun → SceytResponse&lt;List&lt;SceytMessage&gt;&gt;">
+  Fetches a specific set of messages from the server by their IDs.
+
+  ```kotlin
+  val result = interactor.loadMessagesById(
+      conversationId = channelId,
+      ids            = listOf(msg1Id, msg2Id)
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      The channel the messages belong to.
+    </ParamField>
+    <ParamField path="ids" type="List&lt;Long&gt;" required>
+      Message IDs to fetch.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getMessageFromServerById" type="suspend fun → SceytResponse&lt;SceytMessage&gt;">
+  Fetches a single message from the server by its ID and persists it locally.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The channel the message belongs to.
+    </ParamField>
+    <ParamField path="messageId" type="Long" required>
+      The ID of the message to fetch.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getMessageFromDbById" type="suspend fun → SceytMessage?">
+  Returns a single message from the local database by its server-assigned ID, or `null` if not found.
+
+  <Expandable title="Parameters">
+    <ParamField path="messageId" type="Long" required>
+      The server-assigned message ID to look up.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getMessageFromDbByTid" type="suspend fun → SceytMessage?">
+  Returns a single message from the local database by its client-side transaction ID (tid), or `null` if not found.
+
+  <Expandable title="Parameters">
+    <ParamField path="messageTid" type="Long" required>
+      The client-generated transaction ID of the pending or sent message.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Syncing Messages
+
+<ResponseField name="syncMessagesAfterMessageId" type="suspend fun → Flow&lt;SyncResult&lt;SceytMessage&gt;&gt;">
+  Fetches all messages sent after `messageId` from the server and persists them locally. Useful for catching up after an extended offline period.
+
+  ```kotlin
+  interactor.syncMessagesAfterMessageId(
+      conversationId = channelId,
+      replyInThread  = false,
+      messageId      = lastKnownMessageId
+  ).collect { syncResult -> /* track progress */ }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      The channel ID to sync.
+    </ParamField>
+    <ParamField path="replyInThread" type="Boolean" required>
+      Pass `true` to sync a thread.
+    </ParamField>
+    <ParamField path="messageId" type="Long" required>
+      Sync messages created after this ID.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="syncNearMessages" type="suspend fun → SyncNearMessagesResult">
+  Synchronises a window of messages around a specific `messageId` from the server. Returns a `SyncNearMessagesResult` with the refreshed message set.
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      The channel ID.
+    </ParamField>
+    <ParamField path="messageId" type="Long" required>
+      The anchor message ID around which to sync.
+    </ParamField>
+    <ParamField path="replyInThread" type="Boolean" required>
+      Pass `true` for thread context.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Sending Messages
+
+<ResponseField name="sendMessageAsFlow" type="suspend fun → Flow&lt;SendMessageResult&gt;">
+  Sends a message and returns a `Flow` that emits `SendMessageResult` events tracking the send lifecycle (pending → uploading attachments → sent). Prefer this over `sendMessage` when you need progress updates.
+
+  ```kotlin
+  interactor.sendMessageAsFlow(channelId, message)
+      .onEach { result -> /* update UI for pending/sent states */ }
+      .launchIn(lifecycleScope)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The channel to send the message to.
+    </ParamField>
+    <ParamField path="message" type="Message" required>
+      The `com.sceyt.chat.models.message.Message` object to send, including body, attachments, and metadata.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sendMessage" type="suspend fun">
+  Fires a message send without returning a flow result. Use for fire-and-forget sending when you don't need per-message progress feedback.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The channel to send the message to.
+    </ParamField>
+    <ParamField path="message" type="Message" required>
+      The message object to send.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sendMessages" type="suspend fun">
+  Sends multiple messages in sequence to a channel. Each message is persisted locally first.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The target channel.
+    </ParamField>
+    <ParamField path="messages" type="List&lt;Message&gt;" required>
+      The list of messages to send.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sendSharedFileMessage" type="suspend fun">
+  Sends a message that originated from the Android share sheet (external file share). Handles the shared file's upload lifecycle.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The target channel.
+    </ParamField>
+    <ParamField path="message" type="Message" required>
+      The message object wrapping the shared file attachment.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sendFrowardMessages" type="suspend fun → SceytResponse&lt;Boolean&gt;">
+  Forwards one or more existing messages to a channel. The forwarded messages are sent as new messages preserving the original sender attribution.
+
+  ```kotlin
+  interactor.sendFrowardMessages(targetChannelId, msg1, msg2)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The channel to forward messages into.
+    </ParamField>
+    <ParamField path="messagesToSend" type="vararg Message" required>
+      One or more message objects to forward.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sendMessageWithUploadedAttachments" type="suspend fun → SceytResponse&lt;SceytMessage&gt;">
+  Sends a message whose attachments have already been uploaded (i.e. the attachment `url` is already populated). Use this when you manage uploads externally.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The target channel.
+    </ParamField>
+    <ParamField path="message" type="Message" required>
+      The message object with pre-uploaded attachment URLs.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Pending Messages
+
+<ResponseField name="sendPendingMessages" type="suspend fun">
+  Retries sending all pending (failed or queued) messages for a specific channel.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The channel whose pending messages should be retried.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sendAllPendingMessages" type="suspend fun">
+  Retries sending all pending messages across every channel. Called automatically after reconnection.
+</ResponseField>
+
+<ResponseField name="sendAllPendingMarkers" type="suspend fun">
+  Flushes all queued read/delivery/played markers that could not be sent while offline.
+</ResponseField>
+
+<ResponseField name="sendAllPendingMessageStateUpdates" type="suspend fun">
+  Syncs all pending message state changes (edits, deletes) that were queued during an offline period.
+</ResponseField>
+
+<ResponseField name="sendAllPendingReactions" type="suspend fun">
+  Sends all queued reaction add/remove operations that could not be delivered while offline.
+</ResponseField>
+
+---
+
+## Markers
+
+<ResponseField name="markMessagesAs" type="suspend fun → List&lt;SceytResponse&lt;MessageListMarker&gt;&gt;">
+  Sends a standard marker (e.g. `MarkerType.Displayed`, `MarkerType.Received`) for the specified message IDs.
+
+  ```kotlin
+  interactor.markMessagesAs(
+      channelId = channelId,
+      marker    = MarkerType.Displayed,
+      ids       = *longArrayOf(msg1Id, msg2Id)
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The channel containing the messages.
+    </ParamField>
+    <ParamField path="marker" type="MarkerType" required>
+      The standard marker type to apply.
+    </ParamField>
+    <ParamField path="ids" type="vararg Long" required>
+      One or more message IDs to mark.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="addMessagesMarker" type="suspend fun → List&lt;SceytResponse&lt;MessageListMarker&gt;&gt;">
+  Sends a custom string marker for the specified message IDs. Use this for application-specific receipts beyond the built-in set.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The channel containing the messages.
+    </ParamField>
+    <ParamField path="marker" type="String" required>
+      Custom marker string (e.g. `"played"`, `"transcribed"`).
+    </ParamField>
+    <ParamField path="ids" type="vararg Long" required>
+      One or more message IDs to mark.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Editing and Deleting
+
+<ResponseField name="editMessage" type="suspend fun → SceytResponse&lt;SceytMessage&gt;">
+  Edits an existing message's body or metadata. Subject to the `messageEditTimeout` window configured in `SceytChatUIKitConfig`.
+
+  ```kotlin
+  val result = interactor.editMessage(channelId, updatedMessage)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The channel the message belongs to.
+    </ParamField>
+    <ParamField path="message" type="SceytMessage" required>
+      The `SceytMessage` with updated `body` and/or `metadata` fields.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="deleteMessage" type="suspend fun → SceytResponse&lt;SceytMessage&gt;">
+  Deletes a message. The `deleteType` parameter controls whether the message is deleted only for the current user or for all participants.
+
+  ```kotlin
+  interactor.deleteMessage(
+      channelId  = channelId,
+      message    = messageToDelete,
+      deleteType = DeleteMessageType.DeleteForEveryone
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The channel the message belongs to.
+    </ParamField>
+    <ParamField path="message" type="SceytMessage" required>
+      The message object to delete.
+    </ParamField>
+    <ParamField path="deleteType" type="DeleteMessageType" required>
+      `DeleteMessageType.DeleteForMe` or `DeleteMessageType.DeleteForEveryone`. The `hardDeleteMessageForAll` config flag may override this.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Channel Events and Live Flow
+
+<ResponseField name="sendChannelEvent" type="suspend fun">
+  Sends a transient typing or custom event to the channel. These events are not persisted as messages.
+
+  ```kotlin
+  interactor.sendChannelEvent(channelId, event = "typing")
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The target channel.
+    </ParamField>
+    <ParamField path="event" type="String" required>
+      The event type string (e.g. `"typing"`, `"recording"`).
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getOnMessageFlow" type="fun → SharedFlow&lt;Pair&lt;SceytChannel, SceytMessage&gt;&gt;">
+  Returns a hot `SharedFlow` that emits a `(SceytChannel, SceytMessage)` pair whenever a new message arrives on any channel. Subscribe at the application level to drive notifications or badge updates.
+
+  ```kotlin
+  interactor.getOnMessageFlow()
+      .onEach { (channel, message) -> showNotification(channel, message) }
+      .launchIn(lifecycleScope)
+  ```
+</ResponseField>

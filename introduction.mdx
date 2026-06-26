@@ -1,0 +1,51 @@
+---
+title: "Sceyt Chat Android UIKit: Chat UI for Android"
+sidebarTitle: "Introduction"
+description: "Sceyt Chat Android UIKit provides prebuilt, customizable chat screens for Android. Learn what's included and how it fits into your architecture."
+---
+
+Sceyt Chat Android UIKit is a comprehensive toolkit that lets you integrate a fully-featured chat experience into any Android application with minimal code. Rather than building channel lists, message threads, media viewers, and voice-message players from scratch, you drop in prebuilt Fragments and Views that are already wired to the Sceyt Chat backend — and style every pixel to match your brand.
+
+## Key Features
+
+- **Offline Support** — Messages and new channels are automatically stored locally when the device is offline and synchronized with the server upon reconnection, so users never lose context.
+- **Voice Messages** — Built-in UI for recording, sending, and playing back voice messages, complete with a waveform seek bar.
+- **Photo & Video Resizer** — On-device resizing and quality controls for faster media delivery without sacrificing fidelity.
+- **Light & Dark Mode** — Full support for both system themes; every color token adapts automatically to user preferences.
+- **Style Customization** — Colors, fonts, icons, bubble backgrounds, and any individual component can be overridden through a type-safe style/customizer API.
+- **Push Notifications** — Firebase Cloud Messaging integration is built in, with customizable notification builders and channel providers.
+- **Reactions & Polls** — Native UI for emoji reactions and interactive polls inside message threads.
+- **Rich Media** — Image gallery, video player (ExoPlayer), document preview, and QR-code scanning are all handled out of the box.
+
+## Architecture Overview
+
+The UIKit sits as a presentation layer on top of the **Sceyt Chat Android SDK** (`com.sceyt:sceyt-chat-android-sdk`). It owns the full UI stack while delegating all network and persistence logic to the SDK beneath it.
+
+| Layer | What it provides |
+|---|---|
+| **Fragments & Activities** | Ready-to-use screens: `ChannelListFragment`, message thread, media viewer, profile, and more |
+| **Views** | Standalone, embeddable UI components (channel list view, message input, attachment picker…) |
+| **Theme system** | A single `SceytChatUIKitTheme` object that exposes color tokens and font overrides |
+| **Formatters** | Replaceable text-formatting logic (timestamps, user names, connection state labels…) |
+| **Providers** | Supply custom data to the UI without subclassing fragments (avatar URLs, unread counts…) |
+| **Renderers** | Control how individual message types are drawn inside the message list |
+| **Navigator** | Intercept or replace screen transitions to integrate with your own navigation graph |
+
+The entry point for all of this is the `SceytChatUIKit` singleton, which is initialized once in your `Application` class and then accessed anywhere in your codebase.
+
+## Requirements
+
+- **Minimum SDK:** Android API 24 (Android 7.0 "Nougat") or later
+- **Compile SDK:** 36
+- **Language:** Kotlin (Java interop available via `@JvmStatic` / `@JvmField` annotations)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Add the UIKit dependency to your Gradle project and configure required repositories.
+  </Card>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Initialize the SDK, connect a user, and display a channel list in under 10 minutes.
+  </Card>
+</CardGroup>

@@ -1,0 +1,255 @@
+---
+title: "Custom Providers and Renderers in Sceyt Chat UIKit"
+sidebarTitle: "Providers & Renderers"
+description: "Replace visual providers and avatar renderers in SceytChatUIKit to control icons, colors, avatar drawing logic, and presence indicators."
+---
+
+Providers and renderers are the extension points that control what is *drawn*, as opposed to formatters which control what *text* is displayed. A provider maps an input data object to a visual output — a `Drawable`, a color integer, or a string label — while a renderer takes full ownership of painting an avatar view for a given data object. Both are fully replaceable on `SceytChatUIKit.providers` and `SceytChatUIKit.renderers`, giving you fine-grained control over icons, avatar fallbacks, presence indicators, and more.
+
+---
+
+## Core Interfaces
+
+### `VisualProvider<From, To>`
+
+A provider maps a typed input to a typed visual output through a `Context`:
+
+```kotlin
+fun interface VisualProvider<From, To> {
+    fun provide(context: Context, from: From): To
+}
+```
+
+- **`context`** — Android `Context` for resolving drawables, colors, or dimensions.
+- **`from`** — the input data (a user, attachment, presence state, etc.).
+- **Returns** — the visual output, commonly `Drawable?`, `Int` (color), or `String`.
+
+### `AvatarRenderer<T>`
+
+A renderer takes full control of populating an `AvatarView` with content:
+
+```kotlin
+fun interface AvatarRenderer<T> : VisualRenderer {
+    fun render(context: Context, from: T, style: AvatarStyle, avatarView: AvatarView)
+}
+```
+
+- **`from`** — the data object (e.g., `SceytChannel` or `SceytUser`).
+- **`style`** — the `AvatarStyle` resolved for this avatar (size, corner radius, border color, etc.).
+- **`avatarView`** — the target `AvatarView` to populate. Use its `appearanceBuilder()` API to set the image URL, default avatar, and other properties.
+
+Two convenience type aliases are available:
+
+```kotlin
+typealias UserAvatarRenderer    = AvatarRenderer<SceytUser>
+typealias ChannelAvatarRenderer = AvatarRenderer<SceytChannel>
+```
+
+---
+
+## `SceytChatUIKit.providers`
+
+The `SceytChatUIKit.providers` property holds a mutable `SceytChatUIKitProviders` instance. Replace any property to change the default behavior. Assignments should be made in `Application.onCreate()` before any UI is inflated.
+
+### Provider Reference
+
+<ResponseField name="messageTypeIconProvider" type="VisualProvider<SceytMessage, Drawable?>">
+  Returns the icon shown on the message type badge (e.g., file, image, voice). Default: `DefaultMessageTypeIconProvider`.
+</ResponseField>
+
+<ResponseField name="attachmentIconProvider" type="VisualProvider<SceytAttachment, Drawable?>">
+  Returns the icon shown for a file attachment in the message bubble. Default: `DefaultAttachmentIconProvider`.
+</ResponseField>
+
+<ResponseField name="channelListAttachmentIconProvider" type="VisualProvider<SceytAttachment, Drawable?>">
+  Returns the icon shown for an attachment in the channel list subtitle row. Default: `DefaultChannelListAttachmentIconProvider`.
+</ResponseField>
+
+<ResponseField name="channelURIValidationMessageProvider" type="VisualProvider<URIValidationType, String>">
+  Returns the validation message string for a channel URI field, keyed by validation result type. Default: `DefaultChannelURIValidationMessageProvider`.
+</ResponseField>
+
+<ResponseField name="userDefaultAvatarProvider" type="VisualProvider<SceytUser, Drawable?>">
+  Returns the fallback drawable for a user with no profile photo. Receives the full `SceytUser` object so the fallback can react to `UserState` (e.g., a "deleted user" icon). Default: `DefaultUserAvatarProvider`.
+</ResponseField>
+
+<ResponseField name="senderNameColorProvider" type="VisualProvider<SceytUser, Int>">
+  Returns a `@ColorInt` for the sender name label displayed above incoming messages in group channels. Default: `DefaultSenderNameColorProvider`.
+
+  <Note>This property is `val` in the source — override only via subclassing `DefaultSenderNameColorProvider` and reassigning the field.</Note>
+</ResponseField>
+
+<ResponseField name="presenceStateColorProvider" type="VisualProvider<PresenceState, Int>">
+  Returns a `@ColorInt` for the presence indicator dot. Receives `PresenceState` (Online, Away, etc.). Default: `DefaultPresenceStateColorProvider`.
+</ResponseField>
+
+<ResponseField name="markerTitleProvider" type="VisualProvider<MarkerType, String>">
+  Returns a human-readable label for a message marker type (e.g., "Delivered", "Read"). Default: `DefaultMarkerTitleProvider`.
+</ResponseField>
+
+### Replacing `userDefaultAvatarProvider`
+
+The default provider returns `R.drawable.sceyt_ic_default_avatar` for active/inactive users and `R.drawable.sceyt_ic_deleted_user` for deleted users. Replace it to use your own placeholders:
+
+```kotlin
+import android.graphics.drawable.Drawable
+import com.sceyt.chatuikit.providers.VisualProvider
+import com.sceyt.chatuikit.data.models.messages.SceytUser
+import com.sceyt.chat.models.user.UserState
+
+SceytChatUIKit.providers.userDefaultAvatarProvider = VisualProvider { context, user ->
+    val resId = when (user.state) {
+        UserState.Deleted  -> R.drawable.ic_deleted_placeholder
+        else               -> R.drawable.ic_user_placeholder
+    }
+    ContextCompat.getDrawable(context, resId)
+}
+```
+
+### Replacing `presenceStateColorProvider`
+
+```kotlin
+import com.sceyt.chat.models.user.PresenceState
+
+SceytChatUIKit.providers.presenceStateColorProvider = VisualProvider { context, state ->
+    when (state) {
+        PresenceState.Online -> ContextCompat.getColor(context, R.color.presence_online)
+        else                 -> ContextCompat.getColor(context, R.color.presence_offline)
+    }
+}
+```
+
+---
+
+## `SceytChatUIKit.renderers`
+
+The `SceytChatUIKit.renderers` property holds a mutable `SceytChatUIKitRenderers` instance. Replacing a renderer gives you complete control over how a specific avatar slot is drawn.
+
+### Renderer Reference
+
+<ResponseField name="channelAvatarRenderer" type="AvatarRenderer<SceytChannel>">
+  Renders avatar images for channels in the channel list, thread headers, and channel info. Handles direct messages (uses peer user's avatar), self-channel (notes icon), and group channels (uses `iconUrl` or initials fallback). Default: `DefaultChannelAvatarRenderer`.
+</ResponseField>
+
+<ResponseField name="userAvatarRenderer" type="AvatarRenderer<SceytUser>">
+  Renders avatar images for users in member lists, message senders, and search results. Default: `DefaultUserAvatarRenderer`.
+</ResponseField>
+
+<ResponseField name="userAndNotesAvatarRenderer" type="AvatarRenderer<SceytUser>">
+  Renders the avatar in the "Notes to self" channel row and direct message threads. Default: `DefaultUserAndNotesAvatarRenderer`.
+</ResponseField>
+
+<ResponseField name="voterAvatarRenderer" type="AvatarRenderer<VoterAvatarRendererAttributes>">
+  Renders the avatar shown next to each voter in poll results. Receives `VoterAvatarRendererAttributes` which bundles the user and any relevant poll context. Default: `DefaultVoterAvatarRenderer`.
+</ResponseField>
+
+<ResponseField name="suggestionUserAvatarRenderer" type="AvatarRenderer<SceytUser>">
+  Renders the avatar in the `@mention` autocomplete suggestion list while the user types. Default: `DefaultSuggestionUserAvatarRenderer`.
+</ResponseField>
+
+### Replacing `channelAvatarRenderer`
+
+Use `appearanceBuilder()` on the provided `AvatarView` to set the remote image URL and a local fallback:
+
+```kotlin
+import com.sceyt.chatuikit.renderers.AvatarRenderer
+import com.sceyt.chatuikit.presentation.custom_views.AvatarView.DefaultAvatar
+
+SceytChatUIKit.renderers.channelAvatarRenderer = AvatarRenderer { context, channel, style, avatarView ->
+    val builder = avatarView.appearanceBuilder().setStyle(style)
+
+    if (channel.isDirect()) {
+        val peer = channel.getPeer()?.user
+        builder
+            .setImageUrl(peer?.avatarURL)
+            .setDefaultAvatar(
+                SceytChatUIKit.providers.userDefaultAvatarProvider.provide(context, peer ?: SceytUser(""))
+            )
+    } else {
+        builder
+            .setImageUrl(channel.iconUrl)
+            .setDefaultAvatar(DefaultAvatar.FromInitials(channel.subject.orEmpty()))
+    }
+
+    builder.build().applyToAvatar()
+}
+```
+
+### Replacing `userAvatarRenderer` with a Custom Image Loader
+
+If you load images with Glide or Coil elsewhere in your app and want the UIKit avatars to use the same loader:
+
+```kotlin
+import com.bumptech.glide.Glide
+import com.sceyt.chatuikit.presentation.custom_views.AvatarView.DefaultAvatar
+
+SceytChatUIKit.renderers.userAvatarRenderer = AvatarRenderer { context, user, style, avatarView ->
+    val fallback = SceytChatUIKit.providers.userDefaultAvatarProvider.provide(context, user)
+
+    if (!user.avatarURL.isNullOrBlank()) {
+        // Load with Glide and fall back to the UIKit placeholder on failure
+        Glide.with(context)
+            .load(user.avatarURL)
+            .placeholder(fallback)
+            .error(fallback)
+            .circleCrop()
+            .into(avatarView)
+    } else {
+        // No remote URL — use the UIKit's built-in appearance builder for initials/default
+        avatarView.appearanceBuilder()
+            .setStyle(style)
+            .setDefaultAvatar(DefaultAvatar.FromInitials(user.firstName.orEmpty()))
+            .build()
+            .applyToAvatar()
+    }
+}
+```
+
+<Tip>
+When you load images with an external library directly into `AvatarView`, make sure the view's size is already known (i.e., not called before layout). Prefer setting the renderer before inflation so the view's `onMeasure` has run by the time `render()` is called.
+</Tip>
+
+---
+
+## Applying Providers and Renderers at Initialization
+
+```kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        SceytChatUIKit.initialize(
+            context        = this,
+            apiUrl         = "https://us-ohio-api.sceyt.com",
+            appId          = "your-app-id",
+            clientId       = UUID.randomUUID().toString(),
+            enableDatabase = true
+        )
+
+        // Custom user avatar fallback
+        SceytChatUIKit.providers.userDefaultAvatarProvider = VisualProvider { context, user ->
+            when (user.state) {
+                UserState.Deleted -> ContextCompat.getDrawable(context, R.drawable.ic_deleted_user)
+                else              -> ContextCompat.getDrawable(context, R.drawable.ic_default_user)
+            }
+        }
+
+        // Custom presence dot color
+        SceytChatUIKit.providers.presenceStateColorProvider = VisualProvider { context, state ->
+            when (state) {
+                PresenceState.Online -> ContextCompat.getColor(context, R.color.online_green)
+                else                 -> ContextCompat.getColor(context, R.color.offline_gray)
+            }
+        }
+
+        // Custom channel avatar renderer
+        SceytChatUIKit.renderers.channelAvatarRenderer = AvatarRenderer { context, channel, style, avatarView ->
+            val builder = avatarView.appearanceBuilder().setStyle(style)
+            builder.setImageUrl(channel.iconUrl)
+                   .setDefaultAvatar(DefaultAvatar.FromInitials(channel.subject.orEmpty()))
+                   .build()
+                   .applyToAvatar()
+        }
+    }
+}
+```

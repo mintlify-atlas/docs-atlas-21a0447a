@@ -1,0 +1,441 @@
+---
+title: "SceytChatUIKitConfig — Full Configuration Reference"
+sidebarTitle: "Configuration"
+description: "All configuration properties on SceytChatUIKitConfig — query limits, presence, channel types, member roles, notifications, media resizing, and more."
+---
+
+`SceytChatUIKitConfig` is the central configuration object for the Sceyt Chat Android UIKit. It is accessible via `SceytChatUIKit.config` and should be configured before calling `connect()`. All properties use sensible defaults so only the fields you need to override must be specified. Sub-configuration objects (such as `QueryLimits` and `PresenceConfig`) are lazily initialised, meaning they are created on first access and can be replaced wholesale or mutated in place.
+
+**Package:** `com.sceyt.chatuikit.config`
+
+```kotlin
+SceytChatUIKit.config.apply {
+    syncChannelsAfterConnect = true
+    hardDeleteMessageForAll  = false
+    messageReactionPerUserLimit = 4
+    queryLimits = QueryLimits(messageListQueryLimit = 30)
+}
+```
+
+---
+
+## Query Limits
+
+<ResponseField name="queryLimits" type="QueryLimits">
+  Controls the page sizes used in every list query. All fields are annotated `@IntRange(1, 50)`.
+
+  ```kotlin
+  SceytChatUIKit.config.queryLimits = QueryLimits(
+      channelListQueryLimit        = 20,
+      channelMemberListQueryLimit  = 30,
+      userListQueryLimit           = 30,
+      messageListQueryLimit        = 50,
+      attachmentListQueryLimit     = 20,
+      reactionListQueryLimit       = 30,
+      unreadMentionsListQueryLimit = 30,
+      votersListQueryLimit         = 30,
+      mutualGroupsQueryLimit       = 10
+  )
+  ```
+
+  <Expandable title="QueryLimits fields">
+    <ParamField path="channelListQueryLimit" type="Int">
+      Number of channels fetched per page. Range 1–50. Default: `20`.
+    </ParamField>
+    <ParamField path="channelMemberListQueryLimit" type="Int">
+      Number of channel members fetched per page. Range 1–50. Default: `30`.
+    </ParamField>
+    <ParamField path="userListQueryLimit" type="Int">
+      Number of users fetched per page when searching. Range 1–50. Default: `30`.
+    </ParamField>
+    <ParamField path="messageListQueryLimit" type="Int">
+      Number of messages fetched per page. Range 1–50. Default: `50`.
+    </ParamField>
+    <ParamField path="attachmentListQueryLimit" type="Int">
+      Number of attachments fetched per page in the media/file gallery. Range 1–50. Default: `20`.
+    </ParamField>
+    <ParamField path="reactionListQueryLimit" type="Int">
+      Number of reactions fetched per page in the reaction voter list. Range 1–50. Default: `30`.
+    </ParamField>
+    <ParamField path="unreadMentionsListQueryLimit" type="Int">
+      Number of unread mention IDs fetched per request. Range 1–50. Default: `30`.
+    </ParamField>
+    <ParamField path="votersListQueryLimit" type="Int">
+      Number of poll voters fetched per page. Range 1–50. Default: `30`.
+    </ParamField>
+    <ParamField path="mutualGroupsQueryLimit" type="Int">
+      Number of mutual groups fetched when viewing another user's profile. Range 1–50. Default: `10`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Presence
+
+<ResponseField name="presenceConfig" type="PresenceConfig">
+  Defines the default presence state and status text sent to the server when the user connects.
+
+  ```kotlin
+  SceytChatUIKit.config.presenceConfig = PresenceConfig(
+      defaultPresenceState  = PresenceState.Online,
+      defaultPresenceStatus = "Available"
+  )
+  ```
+
+  <Expandable title="PresenceConfig fields">
+    <ParamField path="defaultPresenceState" type="PresenceState">
+      The `PresenceState` set automatically on connect. Default: `PresenceState.Online`.
+    </ParamField>
+    <ParamField path="defaultPresenceStatus" type="String">
+      The status message string sent alongside the presence state. Default: `""`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Channel URI
+
+<ResponseField name="channelURIConfig" type="ChannelURIConfig">
+  Governs validation rules for public-channel URIs (handles/slugs).
+
+  ```kotlin
+  SceytChatUIKit.config.channelURIConfig = ChannelURIConfig(
+      prefix    = "@",
+      minLength = 5,
+      maxLength = 50,
+      regex     = Regex("^[a-zA-Z0-9_]*\$")
+  )
+  ```
+
+  <Expandable title="ChannelURIConfig fields">
+    <ParamField path="prefix" type="String">
+      Display prefix prepended to URIs in the UI. Default: `"@"`.
+    </ParamField>
+    <ParamField path="minLength" type="Int">
+      Minimum allowed URI length (excluding prefix). Default: `5`.
+    </ParamField>
+    <ParamField path="maxLength" type="Int">
+      Maximum allowed URI length. Default: `50`.
+    </ParamField>
+    <ParamField path="regex" type="Regex">
+      Regular expression used to validate URI characters. Default: `^[a-zA-Z0-9_]*$`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Channel Types
+
+<ResponseField name="channelTypesConfig" type="ChannelTypesConfig">
+  Maps logical channel-type names to the string identifiers used in the Sceyt API.
+
+  ```kotlin
+  SceytChatUIKit.config.channelTypesConfig = ChannelTypesConfig(
+      direct    = "direct",
+      group     = "group",
+      broadcast = "broadcast"
+  )
+  ```
+
+  <Expandable title="ChannelTypesConfig fields">
+    <ParamField path="direct" type="String">
+      Type identifier for 1-to-1 direct channels. Default: `"direct"`.
+    </ParamField>
+    <ParamField path="group" type="String">
+      Type identifier for group channels. Default: `"group"`.
+    </ParamField>
+    <ParamField path="broadcast" type="String">
+      Type identifier for broadcast channels. Default: `"broadcast"`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Member Roles
+
+<ResponseField name="memberRolesConfig" type="MemberRolesConfig">
+  Maps logical role names to the string identifiers used in the Sceyt API.
+
+  ```kotlin
+  SceytChatUIKit.config.memberRolesConfig = MemberRolesConfig(
+      owner       = "owner",
+      admin       = "admin",
+      participant = "participant",
+      subscriber  = "subscriber"
+  )
+  ```
+
+  <Expandable title="MemberRolesConfig fields">
+    <ParamField path="owner" type="String">
+      Role granted to the channel creator. Default: `"owner"`.
+    </ParamField>
+    <ParamField path="admin" type="String">
+      Role for channel administrators. Default: `"admin"`.
+    </ParamField>
+    <ParamField path="participant" type="String">
+      Role for regular group channel members. Default: `"participant"`.
+    </ParamField>
+    <ParamField path="subscriber" type="String">
+      Role for read-only broadcast channel subscribers. Default: `"subscriber"`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Push Notifications
+
+<ResponseField name="notificationConfig" type="PushNotificationConfig">
+  Controls push notification registration and display behaviour.
+
+  ```kotlin
+  SceytChatUIKit.config.notificationConfig = PushNotificationConfig(
+      isPushEnabled                = true,
+      suppressWhenAppIsInForeground = true,
+      shouldDisplayNotification    = { pushData -> true },
+      pushProviders                = listOf(MyFcmProvider())
+  )
+  ```
+
+  <Expandable title="PushNotificationConfig fields">
+    <ParamField path="isPushEnabled" type="Boolean">
+      Enables or disables device push token registration. When `false` the token is never sent to the server. Default: `true`.
+    </ParamField>
+    <ParamField path="suppressWhenAppIsInForeground" type="Boolean">
+      When `true`, system notifications are not displayed while the app is in the foreground. Default: `true`.
+    </ParamField>
+    <ParamField path="shouldDisplayNotification" type="(PushData) -> Boolean">
+      A predicate called for each incoming push. Return `false` to suppress display of that notification. Default: always `true`.
+    </ParamField>
+    <ParamField path="pushProviders" type="List&lt;PushDeviceProvider&gt;">
+      Ordered list of `PushDeviceProvider` implementations. The first provider whose `isSupported()` returns `true` is used for token registration. Default: empty list.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Voice Recorder
+
+<ResponseField name="voiceRecorderConfig" type="VoiceRecorderConfig">
+  Configures audio quality and duration limits for the built-in voice message recorder.
+
+  ```kotlin
+  SceytChatUIKit.config.voiceRecorderConfig = VoiceRecorderConfig(
+      maxDuration  = VoiceRecorderDuration.MaxDuration(5.minutes.inWholeMilliseconds),
+      bitrate      = 32_000,
+      simplingRate = 16_000
+  )
+  ```
+
+  <Expandable title="VoiceRecorderConfig fields">
+    <ParamField path="maxDuration" type="VoiceRecorderDuration">
+      Maximum recording length. Use `VoiceRecorderDuration.Unlimited` for no limit, or `VoiceRecorderDuration.MaxDuration(ms)` to cap to a millisecond value. Default: `MaxDuration(5 minutes)`.
+    </ParamField>
+    <ParamField path="bitrate" type="Int">
+      Encoding bitrate in bits per second. Default: `32000`.
+    </ParamField>
+    <ParamField path="simplingRate" type="Int">
+      Audio sampling rate in Hz. Default: `16000`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Global Search
+
+<ResponseField name="globalSearchConfig" type="GlobalSearchConfig">
+  Tunes the behaviour of the global search screen.
+
+  ```kotlin
+  SceytChatUIKit.config.globalSearchConfig.apply {
+      userSuggestionsLimit  = 8
+      searchInputDebounceMs = 300
+      closeBehavior         = GlobalSearchCloseBehavior.OnMessageSent
+  }
+  ```
+
+  <Expandable title="GlobalSearchConfig fields">
+    <ParamField path="userSuggestionsLimit" type="Int">
+      Maximum number of user suggestions shown in search results. Default: `8`.
+    </ParamField>
+    <ParamField path="searchInputDebounceMs" type="Long">
+      Milliseconds to wait after the user stops typing before executing the search query. Default: `300`.
+    </ParamField>
+    <ParamField path="closeBehavior" type="GlobalSearchCloseBehavior">
+      Determines when the global search screen auto-closes. Options: `Never`, `OnChannelOpen`, `OnMessageSent`. Default: `OnMessageSent`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Channel Invite Deep Link
+
+<ResponseField name="channelLinkDeepLinkConfig" type="ChannelInviteDeepLinkConfig?">
+  Optional configuration for generating and parsing channel invite deep links. When `null`, invite-link features are disabled in the UI.
+
+  ```kotlin
+  SceytChatUIKit.config.channelLinkDeepLinkConfig = ChannelInviteDeepLinkConfig(
+      scheme     = "https",
+      host       = "link.example.com",
+      pathPrefix = "/join/"
+  )
+  // Produces: https://link.example.com/join/{inviteKey}
+  ```
+
+  <Expandable title="ChannelInviteDeepLinkConfig fields">
+    <ParamField path="scheme" type="String">
+      URL scheme, e.g. `"https"` or a custom scheme.
+    </ParamField>
+    <ParamField path="host" type="String">
+      Domain name for the deep link, e.g. `"link.sceyt.com"`.
+    </ParamField>
+    <ParamField path="pathPrefix" type="String">
+      Path segment appended before the invite key, e.g. `"/join/"`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Sync and Message Behaviour
+
+<ResponseField name="syncChannelsAfterConnect" type="Boolean">
+  When `true`, `SceytSyncManager` automatically synchronises channel and message data after each successful connection. Default: `true`.
+</ResponseField>
+
+<ResponseField name="hardDeleteMessageForAll" type="Boolean">
+  When `true`, deleting a message performs a hard delete for all participants rather than a soft/local delete. Default: `false`.
+</ResponseField>
+
+<ResponseField name="messageEditTimeout" type="Long">
+  Maximum window in milliseconds after sending a message during which it can be edited. Default: `2 hours` (`7_200_000` ms).
+
+  ```kotlin
+  SceytChatUIKit.config.messageEditTimeout = 1.hours.inWholeMilliseconds
+  ```
+</ResponseField>
+
+<ResponseField name="preventDuplicateAttachmentUpload" type="Boolean">
+  When `true`, the SDK checks a file checksum before uploading to avoid uploading the same file twice. Default: `true`.
+</ResponseField>
+
+---
+
+## Media Resizing
+
+<ResponseField name="avatarResizeConfig" type="ResizeConfig">
+  Resize settings applied to avatar images before upload. Default: `ResizeConfig.Low` (720 px, 80% quality).
+
+  ```kotlin
+  SceytChatUIKit.config.avatarResizeConfig = ResizeConfig.Medium // 1080 px, 80%
+  ```
+</ResponseField>
+
+<ResponseField name="imageAttachmentResizeConfig" type="ResizeConfig">
+  Resize settings applied to image attachments before upload. Default: `ResizeConfig.Medium` (1080 px, 80% quality).
+
+  | Preset | Dimension threshold | Quality |
+  |--------|--------------------:|--------:|
+  | `Low`  | 720 px              | 80 %    |
+  | `Medium` | 1080 px           | 80 %    |
+  | `High` | 1600 px             | 90 %    |
+</ResponseField>
+
+<ResponseField name="videoAttachmentResizeConfig" type="VideoResizeConfig">
+  Resize settings applied to video attachments before upload. Default: `VideoResizeConfig.Medium` (1200 px, 80% quality, 30 fps, 1 Mbps bitrate).
+
+  | Preset   | Threshold | Quality | FPS | Bitrate   |
+  |----------|----------:|--------:|----:|----------:|
+  | `Low`    | 800 px    | 80 %    | 30  | 500 kbps  |
+  | `Medium` | 1200 px   | 80 %    | 30  | 1000 kbps |
+  | `High`   | 1600 px   | 80 %    | 30  | 2000 kbps |
+</ResponseField>
+
+---
+
+## Channel List and UI Preferences
+
+<ResponseField name="channelListOrder" type="ChannelListOrder">
+  Sort order for the channel list. Uses `ChannelListQuery.ChannelListOrder` from the Sceyt Chat SDK. Default: `ListQueryChannelOrderLastMessage`.
+</ResponseField>
+
+<ResponseField name="defaultReactions" type="List&lt;String&gt;">
+  The emoji list shown in the quick-reaction strip on messages. Default: `["😎", "😂", "👌", "😍", "👍", "😏"]`.
+
+  ```kotlin
+  SceytChatUIKit.config.defaultReactions = listOf("❤️", "👍", "😂", "😮", "😢", "🙏")
+  ```
+</ResponseField>
+
+<ResponseField name="mentionTriggerPrefix" type="Char">
+  The character that triggers the member-mention suggestion dropdown in the message input. Default: `'@'`.
+</ResponseField>
+
+---
+
+## Notification and Auto-Delete Options
+
+<ResponseField name="muteChannelNotificationOptions" type="MuteNotificationOptions">
+  A `fun interface` that returns a list of `IntervalOption` items shown in the mute-notifications picker (e.g. "1 hour", "8 hours", "Forever"). Defaults to `DefaultMuteNotificationOptions`.
+
+  ```kotlin
+  SceytChatUIKit.config.muteChannelNotificationOptions = MuteNotificationOptions { context ->
+      listOf(
+          IntervalOption(context.getString(R.string.mute_1h),   3_600_000L),
+          IntervalOption(context.getString(R.string.mute_forever), Long.MAX_VALUE)
+      )
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="messageAutoDeleteOptions" type="AutoDeleteMessagesOptions">
+  A `fun interface` that returns a list of `IntervalOption` items for the auto-delete timer picker. Defaults to `DefaultAutoDeleteMessagesOptions`.
+</ResponseField>
+
+---
+
+## Avatar Colors
+
+<ResponseField name="defaultAvatarBackgroundColors" type="AvatarBackgroundColors">
+  A `fun interface` that returns a list of `Int` color values used as backgrounds for generated (initials-based) avatars. Defaults to `DefaultAvatarBackgroundColors`.
+
+  ```kotlin
+  SceytChatUIKit.config.defaultAvatarBackgroundColors = AvatarBackgroundColors { context ->
+      listOf(
+          ContextCompat.getColor(context, R.color.avatar_bg_1),
+          ContextCompat.getColor(context, R.color.avatar_bg_2),
+      )
+  }
+  ```
+</ResponseField>
+
+---
+
+## Mutual Groups
+
+<ResponseField name="mutualGroupChannelTypes" type="MutualGroupChannelTypes">
+  A `fun interface` returning the list of channel type strings to include when fetching mutual groups between two users. Defaults to `DefaultMutualGroupChannelTypes`.
+</ResponseField>
+
+---
+
+## Limits and Constraints
+
+<ResponseField name="messageReactionPerUserLimit" type="Int">
+  Maximum number of distinct reactions a single user can add to one message. Annotated `@IntRange(from = 1, to = 6)`. Default: `6`.
+</ResponseField>
+
+<ResponseField name="messageMultiselectLimit" type="Int">
+  Maximum number of messages that can be selected at once in multi-select mode. Annotated `@IntRange(from = 1, to = 50)`. Default: `30`.
+</ResponseField>
+
+<ResponseField name="attachmentSelectionLimit" type="Int">
+  Maximum number of files or media items that can be selected in a single attachment-picker session. Annotated `@IntRange(from = 1, to = 50)`. Default: `20`.
+</ResponseField>

@@ -1,0 +1,150 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Sceyt Chat Android UIKit",
+  "projectDescription": "A comprehensive Android UI Kit that provides prebuilt, customizable chat components for quickly integrating a fully-featured chat experience into Android applications on top of the Sceyt Chat SDK.",
+  "theme": "palm",
+  "primaryColor": "#6B4EFF",
+  "lightColor": "#EDE8FF",
+  "darkColor": "#3D2DB5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/initialization",
+              "core-concepts/connection",
+              "core-concepts/authentication"
+            ]
+          },
+          {
+            "group": "UI Components",
+            "pages": [
+              "components/channel-list",
+              "components/channel-messages",
+              "components/channel-info",
+              "components/create-channel",
+              "components/global-search"
+            ]
+          },
+          {
+            "group": "Customization",
+            "pages": [
+              "customization/theming",
+              "customization/styles",
+              "customization/formatters",
+              "customization/providers-renderers"
+            ]
+          },
+          {
+            "group": "Push Notifications",
+            "pages": [
+              "notifications/push-notifications",
+              "notifications/notification-customization"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/navigation",
+              "advanced/offline-support",
+              "advanced/media-handling",
+              "advanced/proguard"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api-reference/sceyt-chat-uikit",
+              "api-reference/sceyt-chat-ui-facade",
+              "api-reference/configuration"
+            ]
+          },
+          {
+            "group": "Interactors",
+            "pages": [
+              "api-reference/channel-interactor",
+              "api-reference/message-interactor",
+              "api-reference/user-interactor",
+              "api-reference/attachment-interactor"
+            ]
+          },
+          {
+            "group": "Styles & Theming",
+            "pages": [
+              "api-reference/style-customizer",
+              "api-reference/style-registry"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Prebuilt channel list, message list, and channel info UI components",
+    "Full offline support with local database caching and automatic sync",
+    "Deep style customization via StyleCustomizer and StyleRegistry for every UI component",
+    "Voice message recording and playback built in",
+    "Photo and video resizing on-device with adjustable quality parameters",
+    "Light/dark mode support",
+    "Firebase push notification integration with customizable notification builders",
+    "Custom navigation system via SceytChatUIKitNavigator and Destination sealed class",
+    "Pluggable formatters, providers, and renderers for text, avatars, and icons",
+    "Poll creation and results support",
+    "Message reactions, mentions, threading, and forwarding",
+    "Self-destructing media messages"
+  ],
+  "publicApiSurface": [
+    "SceytChatUIKit.initialize(appContext, apiUrl, appId, clientId, enableDatabase)",
+    "SceytChatUIKit.connect(token)",
+    "SceytChatUIKit.reconnect()",
+    "SceytChatUIKit.disconnect()",
+    "SceytChatUIKit.logOut(unregisterPushCallback)",
+    "SceytChatUIKit.theme: SceytChatUIKitTheme",
+    "SceytChatUIKit.config: SceytChatUIKitConfig",
+    "SceytChatUIKit.formatters: SceytChatUIKitFormatters",
+    "SceytChatUIKit.providers: SceytChatUIKitProviders",
+    "SceytChatUIKit.renderers: SceytChatUIKitRenderers",
+    "SceytChatUIKit.notifications: SceytNotifications",
+    "SceytChatUIKit.navigator: SceytChatUIKitNavigator",
+    "SceytChatUIKit.chatTokenProvider: ChatTokenProvider",
+    "SceytChatUIKit.messageTransformer: MessageTransformer",
+    "SceytChatUIFacade.channelInteractor: ChannelInteractor",
+    "SceytChatUIFacade.messageInteractor: MessageInteractor",
+    "SceytChatUIFacade.userInteractor: UserInteractor",
+    "SceytChatUIFacade.attachmentInteractor: AttachmentInteractor",
+    "SceytChatUIFacade.messageReactionInteractor: MessageReactionInteractor",
+    "SceytChatUIFacade.channelMemberInteractor: ChannelMemberInteractor",
+    "ChannelListFragment",
+    "ChannelListView",
+    "ChannelActivity",
+    "MessagesListView",
+    "Destination (sealed class for navigation)",
+    "SceytChatUIKitNavigator.resolve(destination)",
+    "StyleCustomizer<S>.apply(context, style)",
+    "StyleRegistry.get(id) / StyleRegistry.set(id, style)",
+    "FirebaseMessagingDelegate.registerFirebaseToken(token)",
+    "FirebaseMessagingDelegate.handleRemoteMessage(remoteMessage)",
+    "MessageItemStyle.styleCustomizer",
+    "ChannelListViewStyle.styleCustomizer",
+    "SceytChatUIKitConfig.queryLimits",
+    "SceytChatUIKitConfig.voiceRecorderConfig",
+    "SceytChatUIKitConfig.notificationConfig",
+    "SceytChatUIKitConfig.defaultReactions"
+  ]
+}

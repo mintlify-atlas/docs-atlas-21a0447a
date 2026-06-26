@@ -1,0 +1,181 @@
+---
+title: "Channel Info Screen — Members, Media, and Settings"
+sidebarTitle: "Channel Info"
+description: "Use ChannelInfoActivity to display channel details, manage members, view shared media and files, and access channel settings like mute and auto-delete."
+---
+
+The Channel Info screen surfaces everything a user needs to manage a conversation: the channel avatar and name, a tabbed gallery of shared media, files, voice messages, and links, a member roster with admin controls, and a settings panel for muting, auto-deleting messages, pinning, and more. It is implemented as `ChannelInfoActivity` — an `AppCompatActivity` composed entirely of Fragments so every section can be replaced independently.
+
+## Opening ChannelInfoActivity
+
+Navigate to the info screen using `Destination.ChannelInfo`:
+
+```kotlin
+import com.sceyt.chatuikit.SceytChatUIKit
+import com.sceyt.chatuikit.navigation.Destination
+import com.sceyt.chatuikit.navigation.navigate
+
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.ChannelInfo(channel)
+)
+```
+
+To open the screen with its in-screen message search pre-enabled (useful when the user taps a "Search" button from the channel header):
+
+```kotlin
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.ChannelInfo(
+        channel = channel,
+        enableSearchMessages = true
+    )
+)
+```
+
+When `enableSearchMessages` is `true`, the screen returns `RESULT_OK` with `ACTION_SEARCH_MESSAGES = true` in the result `Intent`, signalling the caller to activate the in-thread search bar.
+
+---
+
+## Screen anatomy
+
+`ChannelInfoActivity` is composed of the following Fragment slots, all of which can be replaced by overriding the corresponding factory method:
+
+| Slot | Default Fragment | Purpose |
+|------|-----------------|---------|
+| Toolbar | `ChannelInfoToolbarFragment` | Back button, avatar, Edit and More actions |
+| Details | `ChannelInfoDetailsFragment` | Avatar, channel name, presence status |
+| Description | `ChannelInfoDescriptionFragment` | Channel about/description text |
+| Settings | `ChannelInfoSettingsFragment` | Mute toggle, auto-delete toggle |
+| Options | `ChannelInfoOptionsFragment` | Members, Admins, Search Messages links |
+| Specifications | `ChannelInfoURIFragment` | Invite link (if `channelLinkDeepLinkConfig` is set) |
+
+---
+
+## Media tabs
+
+Below the header, a `ViewPager2` / `TabLayout` shows shared content grouped by type:
+
+<CardGroup cols={2}>
+  <Card title="Media" icon="images">
+    Photos and videos shared in the channel, displayed as a grid with tap-to-preview.
+  </Card>
+  <Card title="Files" icon="file">
+    All non-media file attachments listed with name, size, and sender.
+  </Card>
+  <Card title="Voice" icon="waveform">
+    Voice messages with inline playback, waveform, and duration.
+  </Card>
+  <Card title="Links" icon="link">
+    All links shared in the channel, with metadata previews.
+  </Card>
+</CardGroup>
+
+For direct (1-to-1) channels where `ChannelInfoStyle.showGroupsInCommon` is `true`, a fifth **Groups in Common** tab is added automatically.
+
+---
+
+## Available actions
+
+### Settings panel
+
+The `ChannelInfoSettingsFragment` surfaces two toggles:
+
+- **Mute / Unmute** — silences push notifications for the channel until a selected time
+- **Auto-delete** — enables disappearing messages for a configurable retention period
+
+```kotlin
+// ChannelInfoActivity handles these internally via ChannelInfoViewModel:
+viewModel.muteChannel(channelId, until)
+viewModel.unMuteChannel(channelId)
+viewModel.enableAutoDelete(channelId, period)
+viewModel.disableAutoDelete(channelId)
+```
+
+### More actions dialog
+
+Tapping the **More** (⋯) toolbar button opens a context dialog with additional destructive actions. The available options differ by channel type:
+
+<Tabs>
+  <Tab title="Group / Direct">
+    - Pin / Unpin conversation
+    - Clear history
+    - Leave channel (groups only)
+    - Block / Unblock user (direct only)
+    - Delete channel
+  </Tab>
+  <Tab title="Public broadcast">
+    - Pin / Unpin
+    - Clear history
+    - Leave / Delete
+  </Tab>
+</Tabs>
+
+### Edit channel
+
+Tapping the **Edit** button in the toolbar commits `EditChannelFragment` onto the back stack, allowing changes to the channel name, avatar, and description.
+
+### Member management
+
+Tapping **Members** or **Admins** in the Options section commits `ChannelMembersFragment` onto the back stack. For public channels the list shows *Subscribers* instead of *Members*.
+
+---
+
+## Subclassing ChannelInfoActivity
+
+Every Fragment slot has a corresponding `open` factory method. Override just the ones you need:
+
+```kotlin
+class MyChannelInfoActivity : ChannelInfoActivity() {
+
+    // Replace the toolbar fragment with your own
+    override fun getChannelToolbarDetailsFragment(channel: SceytChannel): Fragment? {
+        return MyToolbarFragment.newInstance(channel)
+    }
+
+    // Add a completely new tab to the pager
+    override fun setupPagerAdapter(viewPager: ViewPager2?, tabLayout: TabLayout?) {
+        super.setupPagerAdapter(viewPager, tabLayout)
+        // pagerAdapter is available here; you can append custom tabs
+    }
+
+    // Intercept the "Leave" action
+    override fun onLeaveChatClick(channel: SceytChannel) {
+        // show your own confirmation dialog, then call leaveChannel()
+        leaveChannel()
+    }
+}
+```
+
+Register your subclass so the navigator uses it:
+
+```kotlin
+SceytChatUIKit.navigator.resolve = { destination ->
+    when (destination) {
+        is Destination.ChannelInfo -> MyChannelInfoDestination(destination.channel, destination.enableSearchMessages)
+        else -> destination
+    }
+}
+```
+
+---
+
+## Style
+
+The overall look of the screen — background colour, tab bar colours, selected tab indicator, and sub-component styles for each tab — is configured through `ChannelInfoStyle`:
+
+```kotlin
+import com.sceyt.chatuikit.styles.channel_info.ChannelInfoStyle
+
+// ChannelInfoStyle is built inside ChannelInfoActivity.onCreate()
+// via ChannelInfoStyle.Builder(this, null).build().
+// Override buildStyle() in your subclass to customise it:
+class MyChannelInfoActivity : ChannelInfoActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // style property is available after super.onCreate()
+    }
+}
+```
+
+`ChannelInfoStyle` contains nested style objects for each media tab (`mediaStyle`, `filesStyle`, `voiceStyle`, `linkStyle`, `commonGroupsStyle`), all of which are registered with `StyleRegistry` so they survive configuration changes.

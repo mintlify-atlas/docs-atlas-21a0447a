@@ -1,0 +1,143 @@
+---
+title: "StyleCustomizer — Override Component Styles at Runtime"
+sidebarTitle: "StyleCustomizer"
+description: "StyleCustomizer<S> is a functional interface used to override the default style of any UIKit component at configuration time using Kotlin lambdas."
+---
+
+`StyleCustomizer<S>` is a `fun interface` that every UIKit component exposes through a `styleCustomizer` property on its companion object. It gives you a single interception point to override any part of a component's default style before the view is first rendered — without subclassing or XML attribute juggling. Because it is a SAM interface, you can assign it directly as a Kotlin lambda.
+
+## Interface declaration
+
+```kotlin
+fun interface StyleCustomizer<S> {
+    fun apply(context: Context, style: S): S
+}
+```
+
+The `apply` function receives the resolved `Context` and the fully-built default `style` instance. Return the style object — either unchanged, or replaced with a modified copy — and that result is what the component uses for the lifetime of the view.
+
+<Note>
+  Every style class in the UIKit is a Kotlin `data class`, so you can safely call `.copy(...)` to override only the fields you care about while keeping everything else at its default value.
+</Note>
+
+## How to register a customizer
+
+Assign the customizer on the companion object of the target style class **before** the component is inflated. The earliest safe location is `Application.onCreate()`, but any point before the hosting `Activity` or `Fragment` is created also works.
+
+```kotlin
+// In your Application.onCreate() or before the Activity is created
+MessageItemStyle.styleCustomizer = StyleCustomizer { context, style ->
+    style.copy(
+        // your overrides here
+    )
+}
+```
+
+The lambda receives a `context: Context` as its first argument, which you can use to resolve colors, drawables, or dimensions at the time the style is built.
+
+<Warning>
+  Setting a customizer **after** a view has already been inflated has no effect on that instance. UIKit reads the customizer exactly once, inside the internal `Builder.build()` call that runs during XML inflation. Views already on-screen will not be updated.
+</Warning>
+
+## When customizers are applied
+
+Internally, each style class contains a nested `Builder` class that reads XML attributes and then calls the customizer as the very last step before returning the style object:
+
+```kotlin
+// Simplified internal Builder pattern used by every component
+return ComponentStyle(
+    // ... resolved defaults ...
+).let { styleCustomizer.apply(context, it) }
+```
+
+This means the customizer always sees the *fully resolved* default style — including theme colors, XML attribute overrides, and any values derived from the current `Context` — giving you a complete picture to selectively override.
+
+## Examples
+
+### Example 1 — Change message bubble colors
+
+Override the incoming and outgoing bubble background colors for `MessagesListView`:
+
+```kotlin
+import android.app.Application
+import com.sceyt.chatuikit.styles.StyleCustomizer
+import com.sceyt.chatuikit.styles.messages_list.item.MessageItemStyle
+
+class MyApplication : Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+
+        MessageItemStyle.styleCustomizer = StyleCustomizer { context, style ->
+            style.copy(
+                incomingBubbleBackgroundStyle = style.incomingBubbleBackgroundStyle.copy(
+                    backgroundColor = context.getColor(R.color.my_incoming_bubble)
+                ),
+                outgoingBubbleBackgroundStyle = style.outgoingBubbleBackgroundStyle.copy(
+                    backgroundColor = context.getColor(R.color.my_outgoing_bubble)
+                )
+            )
+        }
+    }
+}
+```
+
+### Example 2 — Customize the channel list view
+
+Override the background color of `ChannelListView` and disable popup actions:
+
+```kotlin
+import android.app.Application
+import com.sceyt.chatuikit.styles.StyleCustomizer
+import com.sceyt.chatuikit.styles.channel.ChannelListViewStyle
+
+class MyApplication : Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+
+        ChannelListViewStyle.styleCustomizer = StyleCustomizer { context, style ->
+            style.copy(
+                backgroundColor = context.getColor(R.color.my_channel_list_bg),
+                showChannelActionAsPopup = true
+            )
+        }
+    }
+}
+```
+
+### Example 3 — Per-view customization for `ChannelListView`
+
+If you use `ChannelListView` in more than one place and need different styles per instance, use `setStyleCustomizerForViewId` instead of the global `styleCustomizer`. Reference each view by its XML `android:id`:
+
+```kotlin
+ChannelListViewStyle.setStyleCustomizerForViewId(
+    viewId = R.id.channelListHome,
+    customizer = StyleCustomizer { context, style ->
+        style.copy(
+            backgroundColor = context.getColor(R.color.home_tab_bg)
+        )
+    }
+)
+```
+
+<Note>
+  `setStyleCustomizerForViewId` takes precedence over the global `styleCustomizer` for that specific view ID. If both are set, the per-view customizer wins.
+</Note>
+
+## Components that expose `styleCustomizer`
+
+Every UIKit component style follows the same pattern. A non-exhaustive list of companion objects that expose `styleCustomizer`:
+
+| Style class | Component |
+|---|---|
+| `MessageItemStyle` | Individual message bubbles inside `MessagesListView` |
+| `ChannelListViewStyle` | `ChannelListView` container |
+| `ChannelItemStyle` | Individual channel rows in the list |
+| `ChannelInfoStyle` | `ChannelInfoActivity` |
+| `CustomCameraStyle` | In-app camera screen |
+| `CameraMediaPreviewStyle` | Media preview after capture |
+
+<Tip>
+  Search for `var styleCustomizer = StyleCustomizer<` in the UIKit source to find every component that supports runtime customization.
+</Tip>

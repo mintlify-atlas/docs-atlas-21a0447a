@@ -1,0 +1,303 @@
+---
+title: "Custom Formatters for Text and Dates in Sceyt Chat UIKit"
+sidebarTitle: "Formatters"
+description: "Replace any text formatter in SceytChatUIKit.formatters to control how channel names, message bodies, dates, and notifications are rendered."
+---
+
+Formatters control how raw data — users, channels, messages, attachments, dates, and push payloads — are turned into the strings and styled text that appear in the UIKit's views. Every piece of human-readable text rendered by the UIKit passes through a formatter. By replacing individual formatters on `SceytChatUIKit.formatters`, you can change display names, date patterns, notification copy, badge labels, and more, without touching any layout XML or subclassing any view.
+
+---
+
+## The `Formatter<T>` Interface
+
+All formatters implement the `Formatter` functional interface:
+
+```kotlin
+fun interface Formatter<T> {
+    fun format(context: Context, from: T): CharSequence
+}
+```
+
+- **`context`** — Android `Context` for resolving strings, colors, or locale information.
+- **`from`** — the input data object of type `T`.
+- **Return value** — a `CharSequence`, so you can return a plain `String` or a richly-styled `SpannableString`.
+
+Two convenience type aliases are pre-defined:
+
+```kotlin
+typealias UserFormatter    = Formatter<SceytUser>
+typealias ChannelFormatter = Formatter<SceytChannel>
+```
+
+For formatters that produce structured output (such as the combined status-and-date shown next to the last channel message), a `TypedFormatter<I, O>` variant is available that returns a typed `O` rather than `CharSequence`.
+
+---
+
+## `SceytChatUIKit.formatters`
+
+The `SceytChatUIKit.formatters` property holds a mutable `SceytChatUIKitFormatters` instance. Replace any formatter property on it to override the default behavior. Assignments should be made in `Application.onCreate()` before the UIKit renders its first view.
+
+```kotlin
+SceytChatUIKit.formatters.userNameFormatter = Formatter { context, user ->
+    "${user.firstName} ${user.lastName}"
+}
+```
+
+---
+
+## Formatter Reference
+
+<ResponseField name="userNameFormatter" type="Formatter<SceytUser>">
+  Formats a user's display name wherever their name appears (channel header, member lists, search results). Default: `DefaultUserNameFormatter`.
+</ResponseField>
+
+<ResponseField name="userShortNameFormatter" type="Formatter<SceytUser>">
+  Formats an abbreviated version of the user's name (e.g., initials or first name only). Default: `DefaultUserShortNameFormatter`.
+</ResponseField>
+
+<ResponseField name="userAndNotesNameFormatter" type="Formatter<SceytUser>">
+  Formats the name shown in the "Notes to self" channel. Default: `DefaultUserAndNotesNameFormatter`.
+</ResponseField>
+
+<ResponseField name="mentionUserNameFormatter" type="Formatter<SceytUser>">
+  Formats the `@mention` text for a user inside a message body. Default: `DefaultMentionUserNameFormatter`.
+</ResponseField>
+
+<ResponseField name="reactedUserNameFormatter" type="Formatter<SceytUser>">
+  Formats the name shown in the reaction details list. Default: `DefaultUserNameFormatter`.
+</ResponseField>
+
+<ResponseField name="channelEventUserNameFormatter" type="Formatter<SceytUser>">
+  Formats user names inside channel event messages (e.g., "Alice was added"). Default: `DefaultChannelEventUserNameFormatter`.
+</ResponseField>
+
+<ResponseField name="channelEventTitleFormatter" type="Formatter<ChannelEventTitleFormatterAttributes>">
+  Formats the full title of a channel event message shown in the message thread. Default: `DefaultChannelEventTitleFormatter`.
+</ResponseField>
+
+<ResponseField name="channelListChannelEventTitleFormatter" type="Formatter<ChannelEventTitleFormatterAttributes>">
+  Formats the channel event subtitle shown in the channel list row. Default: `DefaultChannelListChannelEventTitleFormatter`.
+</ResponseField>
+
+<ResponseField name="channelNameFormatter" type="Formatter<SceytChannel>">
+  Formats the channel title used in the message thread header and channel info. Default: `DefaultChannelNameFormatter`.
+</ResponseField>
+
+<ResponseField name="channelSubtitleFormatter" type="Formatter<SceytChannel>">
+  Formats the subtitle line in the message thread header (e.g., "3 members", "online"). Default: `DefaultChannelSubtitleFormatter`.
+</ResponseField>
+
+<ResponseField name="channelListItemSubtitleFormatter" type="Formatter<ChannelItemSubtitleFormatterAttributes>">
+  Formats the subtitle line within each channel list row. Default: `DefaultChannelListSubtitleFormatter`.
+</ResponseField>
+
+<ResponseField name="channelDateFormatter" type="Formatter<Date>">
+  Formats the timestamp shown in the channel list row (e.g., "Mon", "12:34"). Default: `DefaultChannelDateFormatter`.
+</ResponseField>
+
+<ResponseField name="channelLastMessageStatusAndDateFormatter" type="TypedFormatter<ChannelLastMessageStatusAndDateFormatterAttributes, ChannelLastMessageStatusAndDate>">
+  Formats the combined delivery-status icon and date shown alongside the last message in the channel list. Returns a typed `ChannelLastMessageStatusAndDate` object. Default: `DefaultChannelLastMessageStatusAndDateFormatter`.
+</ResponseField>
+
+<ResponseField name="channelLastMessageSenderNameFormatter" type="Formatter<SceytChannel>">
+  Formats the sender name prefix for the last message in a group channel (e.g., "Alice:"). Default: `DefaultChannelLastMessageSenderNameFormatter`.
+</ResponseField>
+
+<ResponseField name="messageBodyFormatter" type="Formatter<MessageBodyFormatterAttributes>">
+  Formats the body text of a message as it appears in the message thread bubble. Default: `DefaultMessageBodyFormatter`.
+</ResponseField>
+
+<ResponseField name="channelLastMessageBodyFormatter" type="Formatter<MessageBodyFormatterAttributes>">
+  Formats the last message body displayed in the channel list subtitle (may include attachment type). Default: `DefaultMessageBodyWithAttachmentsFormatter`.
+</ResponseField>
+
+<ResponseField name="replyMessageBodyFormatter" type="Formatter<MessageBodyFormatterAttributes>">
+  Formats the body of the message shown in the input bar reply preview. Default: `DefaultMessageBodyWithAttachmentsFormatter`.
+</ResponseField>
+
+<ResponseField name="repliedMessageBodyFormatter" type="Formatter<MessageBodyFormatterAttributes>">
+  Formats the quoted body inside an already-sent reply bubble. Default: `DefaultMessageBodyWithAttachmentsFormatter`.
+</ResponseField>
+
+<ResponseField name="editMessageBodyFormatter" type="Formatter<MessageBodyFormatterAttributes>">
+  Formats the message body while it is being edited in the input bar. Default: `DefaultMessageBodyWithAttachmentsFormatter`.
+</ResponseField>
+
+<ResponseField name="draftMessageBodyFormatter" type="Formatter<DraftMessageBodyFormatterAttributes>">
+  Formats a saved draft message body. Default: `DefaultDraftMessageBodyFormatter`.
+</ResponseField>
+
+<ResponseField name="unsupportedMessageBodyFormatter" type="Formatter<SceytMessage>">
+  Formats messages with an unrecognized type. Default: `DefaultUnsupportedMessageBodyFormatter`.
+</ResponseField>
+
+<ResponseField name="selfDestructedMessageBodyFormatter" type="Formatter<SceytMessage>">
+  Formats the placeholder shown for a self-destructed (view-once) message after it has been opened. Default: `DefaultSelfDestructedMessageBodyFormatter`.
+</ResponseField>
+
+<ResponseField name="systemMessageBodyFormatter" type="Formatter<SceytMessage>">
+  Formats system / event messages (join, leave, name changes) in the message thread. Default: `DefaultSystemMessageBodyFormatter`.
+</ResponseField>
+
+<ResponseField name="messageDateFormatter" type="Formatter<Date>">
+  Formats the timestamp shown inside each message bubble. Default: `DefaultMessageDateFormatter`.
+</ResponseField>
+
+<ResponseField name="messageDateSeparatorFormatter" type="Formatter<Date>">
+  Formats the date label displayed in date-separator rows between message groups. Default: `DefaultMessageDateSeparatorFormatter`.
+</ResponseField>
+
+<ResponseField name="messageInfoDateFormatter" type="Formatter<Date>">
+  Formats the date shown in the message info / delivery status screen. Default: `DefaultMessageInfoDateFormatter`.
+</ResponseField>
+
+<ResponseField name="messageMarkerDateFormatter" type="Formatter<Date>">
+  Formats the timestamp shown next to each read receipt marker in the message info screen. Default: `DefaultMessageMarkerDateFormatter`.
+</ResponseField>
+
+<ResponseField name="mediaDurationFormatter" type="Formatter<Long>">
+  Formats a duration in milliseconds as a human-readable string (e.g., "1:23") for video and audio attachments. Default: `DefaultMediaDurationFormatter`.
+</ResponseField>
+
+<ResponseField name="voiceDurationFormatter" type="Formatter<Long>">
+  Formats a voice message duration. Default: `DefaultVoiceDurationFormatter`.
+</ResponseField>
+
+<ResponseField name="attachmentNameFormatter" type="Formatter<SceytAttachment>">
+  Formats the file name displayed for file attachments. Default: `DefaultAttachmentNameFormatter`.
+</ResponseField>
+
+<ResponseField name="attachmentSizeFormatter" type="Formatter<SceytAttachment>">
+  Formats the file size label (e.g., "2.4 MB") for file attachments. Default: `DefaultAttachmentSizeFormatter`.
+</ResponseField>
+
+<ResponseField name="unreadCountFormatter" type="Formatter<Long>">
+  Formats the unread badge count (e.g., turning 1000 into "999+"). Default: `DefaultUnreadCountFormatter`.
+</ResponseField>
+
+<ResponseField name="notificationTitleFormatter" type="Formatter<PushData>">
+  Formats the push notification title. Default: `DefaultNotificationTitleFormatter`.
+</ResponseField>
+
+<ResponseField name="notificationBodyFormatter" type="Formatter<PushData>">
+  Formats the push notification body text. Default: `DefaultNotificationBodyFormatter`.
+</ResponseField>
+
+<ResponseField name="pollTypeFormatter" type="Formatter<SceytPollDetails>">
+  Formats the poll type label shown in poll messages. Default: `DefaultPollTypeFormatter`.
+</ResponseField>
+
+<ResponseField name="pollVoteCountFormatter" type="Formatter<PollOptionUiModel>">
+  Formats the vote count shown on each poll option. Default: `DefaultPollVoteCountFormatter`.
+</ResponseField>
+
+<ResponseField name="pollResultVoteCountFormatter" type="Formatter<Int>">
+  Formats the total vote count shown in poll results. Default: `DefaultPollResultVoteCountFormatter`.
+</ResponseField>
+
+<ResponseField name="connectionStateTitleFormatter" type="Formatter<ConnectionState>">
+  Formats the connection-state banner text (e.g., "Connecting…", "Reconnecting…"). Default: `DefaultConnectionsStateTitleFormatter`.
+</ResponseField>
+
+<ResponseField name="searchMessageResultBodyFormatter" type="Formatter<SearchMessageResultFormatterAttributes>">
+  Formats a search result message body, typically with query highlights. Default: `DefaultSearchMessageResultBodyFormatter`.
+</ResponseField>
+
+<ResponseField name="searchMessageSenderNameFormatter" type="Formatter<SceytMessage>">
+  Formats the sender name in a search result row. Default: `DefaultSearchMessageSenderNameFormatter`.
+</ResponseField>
+
+<ResponseField name="searchMessageDateFormatter" type="Formatter<Date>">
+  Formats the date shown in a search result row. Default: `DefaultSearchMessageDateFormatter`.
+</ResponseField>
+
+---
+
+## Replacement Examples
+
+### Display Name
+
+```kotlin
+import com.sceyt.chatuikit.formatters.Formatter
+
+SceytChatUIKit.formatters.userNameFormatter = Formatter { context, user ->
+    buildString {
+        if (!user.firstName.isNullOrBlank()) append(user.firstName)
+        if (!user.lastName.isNullOrBlank()) {
+            if (isNotEmpty()) append(" ")
+            append(user.lastName)
+        }
+        if (isEmpty()) append(user.id)
+    }
+}
+```
+
+### Custom Date Pattern
+
+```kotlin
+import java.text.SimpleDateFormat
+import java.util.Locale
+
+SceytChatUIKit.formatters.messageDateFormatter = Formatter { context, date ->
+    SimpleDateFormat("h:mm a", Locale.getDefault()).format(date)
+}
+```
+
+### Push Notification Body
+
+```kotlin
+SceytChatUIKit.formatters.notificationBodyFormatter = Formatter { context, pushData ->
+    val sender = pushData.user?.let { "${it.firstName} ${it.lastName}".trim() }
+        ?: context.getString(R.string.someone)
+    "$sender sent you a message"
+}
+```
+
+### Unread Count Badge
+
+```kotlin
+SceytChatUIKit.formatters.unreadCountFormatter = Formatter { context, count ->
+    when {
+        count >= 1000 -> "${count / 1000}k+"
+        else          -> count.toString()
+    }
+}
+```
+
+<Note>
+All formatter assignments take effect immediately for any view that has not yet been created. Already-rendered views may need to be invalidated or their adapter notified to pick up the new formatter output.
+</Note>
+
+---
+
+## Applying Formatters at Initialization
+
+```kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        SceytChatUIKit.initialize(
+            context        = this,
+            apiUrl         = "https://us-ohio-api.sceyt.com",
+            appId          = "your-app-id",
+            clientId       = UUID.randomUUID().toString(),
+            enableDatabase = true
+        )
+
+        with(SceytChatUIKit.formatters) {
+            userNameFormatter = Formatter { _, user ->
+                "${user.firstName} ${user.lastName}".trim().ifEmpty { user.id }
+            }
+
+            messageDateFormatter = Formatter { _, date ->
+                SimpleDateFormat("h:mm a", Locale.getDefault()).format(date)
+            }
+
+            unreadCountFormatter = Formatter { _, count ->
+                if (count > 99) "99+" else count.toString()
+            }
+        }
+    }
+}
+```

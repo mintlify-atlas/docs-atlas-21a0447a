@@ -1,0 +1,198 @@
+---
+title: "Authenticate Users with Sceyt Chat Android UIKit"
+sidebarTitle: "Authentication"
+description: "Understand how user tokens work in Sceyt Chat, how to connect a user, handle token expiry, and implement a ChatTokenProvider for automatic refresh."
+---
+
+Authentication in Sceyt Chat is entirely token-based. Your backend issues a short-lived JSON Web Token (JWT) signed with your Sceyt application credentials, your Android app requests that token at login time, and then passes it directly to `SceytChatUIKit.connect()`. The SDK never stores credentials — it only holds the token in memory for the duration of the session. This design keeps your Sceyt app secret safely on your server and makes it straightforward to rotate tokens as they expire.
+
+## How tokens work
+
+<Steps>
+  <Step title="User logs in to your backend">
+    Your server authenticates the user by whatever mechanism you choose (password, OAuth, SSO, etc.) and then calls the Sceyt REST API to issue a signed JWT for that user.
+  </Step>
+  <Step title="Backend returns the token to your app">
+    The JWT is returned as part of your own login response. Your app stores it in memory (or in an encrypted store if persistence across cold starts is required).
+  </Step>
+  <Step title="App calls SceytChatUIKit.connect()">
+    Pass the token to the UIKit. The SDK opens a WebSocket, presents the token, and the Sceyt server validates it and begins the session.
+  </Step>
+  <Step title="App refreshes the token before it expires">
+    Tokens are short-lived. Implement `ChatTokenProvider` (or collect the expiry flows manually) to refresh transparently without interrupting the user experience.
+  </Step>
+</Steps>
+
+<Warning>
+  Never hardcode a token, a Sceyt app secret, or any other credential in your Android client code. All token issuance must happen server-side. Hardcoded tokens can be extracted from your APK, compromising every user on your platform.
+</Warning>
+
+## Connecting a user
+
+After your login flow delivers a token, call `connect()`:
+
+```kotlin
+// Typically inside your login ViewModel or after observing a successful auth response:
+val userToken: String = authRepository.getUserToken(userId)
+SceytChatUIKit.connect(token = userToken)
+```
+
+The method is non-blocking. The WebSocket handshake happens on a background thread. Observe `ConnectionEventManager.onChangedConnectStatusFlow` to react once the connection is live:
+
+```kotlin
+lifecycleScope.launch {
+    ConnectionEventManager.onChangedConnectStatusFlow.collect { data ->
+        if (data.state == ConnectionState.Connected) {
+            // Safe to launch your main chat UI
+        }
+    }
+}
+```
+
+## Reading the current user
+
+Once connected, the UIKit exposes the authenticated user's identity through two properties on `SceytChatUIKit`:
+
+```kotlin
+val userId: String? = SceytChatUIKit.currentUserId
+// e.g. "user_abc123"
+
+val user: SceytUser? = SceytChatUIKit.currentUser
+// Full SceytUser object: id, firstName, lastName, avatarURL, presence, metadata, …
+```
+
+Both properties return `null` when no user is connected. Check for `null` before accessing them outside of a connected session.
+
+## Handling token expiry
+
+Tokens expire. If your app does not supply a fresh token in time, the WebSocket connection is dropped and the user is effectively disconnected. The SDK surfaces two distinct warning stages through `SharedFlow` properties on `SceytChatUIFacade`:
+
+| Flow | When it emits | Recommended action |
+|---|---|---|
+| `onTokenWillExpire` | Shortly **before** the token expires | Proactively fetch a new token and call `updateToken()` |
+| `onTokenExpired` | The moment the token **has** expired | Urgently fetch a new token and call `updateToken()` to reconnect |
+
+Collect both flows in a scope that lives as long as the user session — a retained `ViewModel` or your `Application`'s `CoroutineScope`:
+
+```kotlin
+class AuthViewModel : ViewModel() {
+
+    private val facade = SceytChatUIKit.chatUIFacade
+
+    init {
+        viewModelScope.launch {
+            facade.onTokenWillExpire.collect {
+                refreshToken(urgent = false)
+            }
+        }
+        viewModelScope.launch {
+            facade.onTokenExpired.collect {
+                refreshToken(urgent = true)
+            }
+        }
+    }
+
+    private suspend fun refreshToken(urgent: Boolean) {
+        val newToken = authRepository.fetchFreshToken()   // suspend call to your backend
+        facade.updateToken(newToken) { success, errorMessage ->
+            if (!success) {
+                Log.e("Auth", "Token refresh failed: $errorMessage")
+                // Consider navigating to the login screen if urgent == true
+            }
+        }
+    }
+}
+```
+
+## Implementing ChatTokenProvider for automatic refresh
+
+The cleanest way to handle token renewal is to implement the `ChatTokenProvider` functional interface and assign it to `SceytChatUIKit.chatTokenProvider`. The SDK calls `provideToken()` automatically whenever it needs a fresh token — you no longer need to manually collect the expiry flows.
+
+### The interface
+
+```kotlin
+// com.sceyt.chatuikit.providers.ChatTokenProvider
+fun interface ChatTokenProvider {
+    suspend fun provideToken(): String?
+}
+```
+
+`provideToken()` is a `suspend` function, so you can freely call any suspending API (Retrofit, Ktor, etc.) inside it. Return the new token as a `String`, or return `null` if token retrieval fails (the SDK will treat this as a failed refresh).
+
+### Implementation example
+
+```kotlin
+class MyTokenProvider(
+    private val authApi: AuthApi,
+    private val userSession: UserSession,
+) : ChatTokenProvider {
+
+    override suspend fun provideToken(): String? {
+        return try {
+            val response = authApi.refreshToken(userSession.refreshToken)
+            userSession.updateTokens(response.accessToken, response.refreshToken)
+            response.accessToken
+        } catch (e: Exception) {
+            Log.e("TokenProvider", "Failed to refresh token", e)
+            null   // returning null signals the SDK that refresh failed
+        }
+    }
+}
+```
+
+### Registering the provider
+
+Set the provider once after `SceytChatUIKit.initialize()` — typically alongside your other UIKit customizations in `Application.onCreate()`:
+
+```kotlin
+SceytChatUIKit.initialize(appContext, apiUrl, appId, clientId)
+
+SceytChatUIKit.chatTokenProvider = MyTokenProvider(
+    authApi     = retrofit.create(AuthApi::class.java),
+    userSession = userSession
+)
+```
+
+<Tip>
+  When `chatTokenProvider` is set, you do not need to collect `onTokenWillExpire` or `onTokenExpired` manually. The SDK will invoke `provideToken()` for you and call `updateToken()` with the result. You only need the manual flow approach if you want explicit control or need to show UI during refresh.
+</Tip>
+
+## Updating the token manually
+
+If you prefer to manage the refresh lifecycle yourself — or if you need to push a new token at a moment of your choosing — call `SceytChatUIFacade.updateToken()` directly:
+
+```kotlin
+SceytChatUIKit.chatUIFacade.updateToken(
+    token    = newJwt,
+    listener = { success, errorMessage ->
+        if (success) {
+            Log.i("Auth", "Token updated, connection restored")
+        } else {
+            Log.e("Auth", "Token update rejected by server: $errorMessage")
+        }
+    }
+)
+```
+
+<ParamField path="token" type="String" required>
+  The fresh JWT to deliver to the server.
+</ParamField>
+
+<ParamField path="listener" type="((success: Boolean, errorMessage: String?) -> Unit)?" default="null">
+  Optional callback invoked on the result of the server-side token validation. `success = true` means the connection is live again with the new token.
+</ParamField>
+
+## Logging out
+
+When the user signs out, call `SceytChatUIKit.logOut()`. This clears all cached data, unregisters the device's push token from Sceyt's servers, and closes the WebSocket:
+
+```kotlin
+SceytChatUIKit.logOut { result ->
+    result.fold(
+        onSuccess = { navigateToLoginScreen() },
+        onFailure = { navigateToLoginScreen() }  // still logged out locally
+    )
+}
+```
+
+After `logOut()` returns, `SceytChatUIKit.currentUserId` and `SceytChatUIKit.currentUser` will both be `null`, and no data remains on disk.

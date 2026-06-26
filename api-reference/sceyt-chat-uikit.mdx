@@ -1,0 +1,227 @@
+---
+title: "SceytChatUIKit — Main Entry Point API Reference"
+sidebarTitle: "SceytChatUIKit"
+description: "Complete API reference for the SceytChatUIKit singleton: initialize, connect, reconnect, disconnect, log out, and access sub-object configurations."
+---
+
+`SceytChatUIKit` is the top-level singleton entry point for the Sceyt Chat Android UIKit. You call `initialize(...)` once in your `Application.onCreate()` to wire up the underlying `ChatClient`, the Koin dependency-injection container, and emoji support. After that, the singleton exposes properties for theming, configuration, formatters, providers, renderers, notifications, and navigation, as well as methods to manage the connection lifecycle and access the full `SceytChatUIFacade` for interactors and core services.
+
+**Package:** `com.sceyt.chatuikit`
+
+---
+
+## Initialization
+
+<ResponseField name="initialize" type="fun">
+  Bootstraps the UIKit. Must be called once, typically in `Application.onCreate()`. It initialises the underlying `ChatClient`, starts the Koin DI container, and sets up emoji support.
+
+  ```kotlin
+  SceytChatUIKit.initialize(
+      appContext   = this,
+      apiUrl       = "https://us-ohio-api.sceyt.com",
+      appId        = "8lwox2ge93",
+      clientId     = UUID.randomUUID().toString(),
+      enableDatabase = true
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="appContext" type="Context" required>
+      The Android application `Context`. Pass `applicationContext` to avoid memory leaks.
+    </ParamField>
+    <ParamField path="apiUrl" type="String" required>
+      The base API URL of your Sceyt cluster (e.g. `"https://us-ohio-api.sceyt.com"`).
+    </ParamField>
+    <ParamField path="appId" type="String" required>
+      Your Sceyt application ID, available in the Sceyt dashboard.
+    </ParamField>
+    <ParamField path="clientId" type="String" required>
+      A unique identifier for this device/session. Typically a stable UUID stored in preferences.
+    </ParamField>
+    <ParamField path="enableDatabase" type="Boolean">
+      Whether to enable the local Room database for offline caching. Defaults to `true`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Connection Management
+
+<ResponseField name="connect" type="fun">
+  Connects the `ChatClient` to the Sceyt server using the supplied JWT or token string.
+
+  ```kotlin
+  SceytChatUIKit.connect(token = myJwtToken)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="token" type="String" required>
+      A valid authentication token (JWT) for the current user.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="reconnect" type="fun">
+  Triggers a reconnection attempt on the underlying `ChatClient`. Use this after a network disruption when you need to force an immediate retry rather than waiting for the automatic reconnect logic.
+
+  ```kotlin
+  SceytChatUIKit.reconnect()
+  ```
+</ResponseField>
+
+<ResponseField name="disconnect" type="fun">
+  Disconnects the `ChatClient` from the Sceyt server without clearing local data.
+
+  ```kotlin
+  SceytChatUIKit.disconnect()
+  ```
+</ResponseField>
+
+<ResponseField name="logOut" type="fun">
+  Performs a full log-out: cancels background sync, cancels pending workers, clears the local database and preferences, unregisters the Firebase push token, disconnects the client, and cancels all displayed notifications. The optional `unregisterPushCallback` reports whether the push token was successfully unregistered.
+
+  ```kotlin
+  SceytChatUIKit.logOut { result ->
+      if (result.isSuccess) {
+          // navigate to login screen
+      }
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="unregisterPushCallback" type="((Result<Boolean>) -> Unit)?">
+      An optional lambda invoked after the push token unregistration attempt completes. `Result.isSuccess` is `true` if the token was removed from the server.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Logging
+
+<ResponseField name="setLogger" type="fun">
+  Installs a custom logger and sets the minimum log level. Call before `initialize` to capture early log output.
+
+  ```kotlin
+  SceytChatUIKit.setLogger(
+      logLevel = SceytLogLevel.Verbose,
+      logger   = MyTimberLogger()
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="logLevel" type="SceytLogLevel" required>
+      Minimum severity to forward to the logger (`Verbose`, `Debug`, `Info`, `Warning`, `Error`, `None`).
+    </ParamField>
+    <ParamField path="logger" type="SceytLogger" required>
+      Your implementation of `SceytLogger` that receives the filtered log events.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Read-Only Properties
+
+<ResponseField name="chatClient" type="ChatClient">
+  Returns the singleton `com.sceyt.chat.ChatClient` instance. Available immediately after `initialize`.
+
+  ```kotlin
+  val client: ChatClient = SceytChatUIKit.chatClient
+  ```
+</ResponseField>
+
+<ResponseField name="currentUserId" type="String?">
+  The ID of the currently authenticated user, or `null` if no user is connected. Reads from `UserInteractor.getCurrentUserId()`.
+
+  ```kotlin
+  val userId: String? = SceytChatUIKit.currentUserId
+  ```
+</ResponseField>
+
+<ResponseField name="currentUser" type="SceytUser?">
+  The full `SceytUser` profile of the currently authenticated user, mapped from `ClientWrapper.currentUser`. Returns `null` before a successful `connect`.
+
+  ```kotlin
+  val user: SceytUser? = SceytChatUIKit.currentUser
+  ```
+</ResponseField>
+
+<ResponseField name="version" type="String">
+  The Maven artifact version string of the UIKit library (e.g. `"2.1.5"`).
+
+  ```kotlin
+  Log.d("UIKit", "Version: ${SceytChatUIKit.version}")
+  ```
+</ResponseField>
+
+---
+
+## Mutable Configuration Properties
+
+<ResponseField name="theme" type="SceytChatUIKitTheme">
+  Controls the global visual theme — colors, fonts, and style overrides applied across all UIKit screens. Replace or mutate before the first UI interaction.
+
+  ```kotlin
+  SceytChatUIKit.theme = SceytChatUIKitTheme().apply {
+      // customise theme properties
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="config" type="SceytChatUIKitConfig">
+  The main configuration object. Covers query limits, presence, channel types, member roles, push notifications, voice recording, search, message constraints, and media resizing. See [Configuration](/api-reference/configuration) for the full property list.
+
+  ```kotlin
+  SceytChatUIKit.config.hardDeleteMessageForAll = true
+  SceytChatUIKit.config.messageReactionPerUserLimit = 4
+  ```
+</ResponseField>
+
+<ResponseField name="formatters" type="SceytChatUIKitFormatters">
+  A collection of formatter lambdas used to transform raw data into display strings (timestamps, user names, channel subjects, file sizes, etc.). Override individual formatters to customise how values appear in the UI.
+</ResponseField>
+
+<ResponseField name="providers" type="SceytChatUIKitProviders">
+  Pluggable providers that supply contextual data to UIKit components, such as attachment previews, avatar URLs, or mention suggestions.
+</ResponseField>
+
+<ResponseField name="renderers" type="SceytChatUIKitRenderers">
+  Custom view renderers for message cells, attachment thumbnails, and other compound views. Replace a renderer to inject your own layouts.
+</ResponseField>
+
+<ResponseField name="notifications" type="SceytNotifications">
+  Entry point for configuring push and in-app notification behaviour. Provides access to `pushNotification.notificationHandler`, channel grouping, and notification style.
+
+  ```kotlin
+  SceytChatUIKit.notifications.pushNotification.notificationHandler
+      .setSmallIcon(R.drawable.ic_notification)
+  ```
+</ResponseField>
+
+<ResponseField name="navigator" type="SceytChatUIKitNavigator">
+  Controls screen navigation within the UIKit. Replace the default `DefaultSceytChatUIKitNavigator` to intercept or override Activity/Fragment transitions.
+</ResponseField>
+
+<ResponseField name="chatTokenProvider" type="ChatTokenProvider?">
+  An optional provider that the UIKit calls when it needs a fresh authentication token (e.g. on token expiry). Implement `ChatTokenProvider` and assign it here to enable automatic token renewal.
+
+  ```kotlin
+  SceytChatUIKit.chatTokenProvider = ChatTokenProvider { callback ->
+      myAuthService.getFreshToken { token -> callback(token) }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="messageTransformer" type="MessageTransformer?">
+  An optional transformer applied to every outgoing `Message` object before it is sent. Use it to inject custom metadata, modify body text, or attach additional payload fields.
+</ResponseField>
+
+<ResponseField name="chatUIFacade" type="SceytChatUIFacade">
+  The internal wiring layer that aggregates all interactors, the sync manager, and the file-transfer service. Injected via Koin and available after `initialize`. See [SceytChatUIFacade](/api-reference/sceyt-chat-ui-facade) for the full API.
+
+  ```kotlin
+  val channelInteractor = SceytChatUIKit.chatUIFacade.channelInteractor
+  ```
+</ResponseField>

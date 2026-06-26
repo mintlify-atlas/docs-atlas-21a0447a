@@ -1,0 +1,226 @@
+---
+title: "Channel Messages View — Full-Featured Chat Thread"
+sidebarTitle: "Channel Messages"
+description: "Integrate ChannelActivity or MessagesListView to display a rich message thread with reactions, replies, voice messages, polls, and media attachments."
+---
+
+The Channel Messages component delivers a fully-featured chat thread: bi-directional message loading, emoji reactions, threaded replies, voice messages, polls, media attachments, message forwarding, multi-select, and self-destructing media — all wired to the Sceyt backend with no extra integration work. Use the turnkey `ChannelActivity` for a full-screen experience, or embed `MessagesListView` directly inside your own layout when you need a custom shell.
+
+## ChannelActivity — the default full-screen chat
+
+`ChannelActivity` is an `AppCompatActivity` that composes three sub-views:
+
+- **`MessagesListView`** — the scrollable message thread
+- **`MessageInputView`** — the typing bar with attachments, voice recording, and emoji
+- **`ChannelHeaderView`** — the channel name, avatar, and typing indicator
+
+You never need to instantiate these sub-views manually; `ChannelActivity` manages them and binds a shared `MessageListViewModel`.
+
+### Opening ChannelActivity
+
+Use `Destination.Channel` through the UIKit navigator:
+
+```kotlin
+import com.sceyt.chatuikit.SceytChatUIKit
+import com.sceyt.chatuikit.navigation.Destination
+import com.sceyt.chatuikit.navigation.navigate
+
+// Open the channel thread from anywhere that has a Context
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.Channel(channel)
+)
+```
+
+To deep-link directly to a specific message (e.g., from a push notification), pass the optional `targetMessageId`:
+
+```kotlin
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.Channel(
+        channel = channel,
+        targetMessageId = 1234567890L
+    )
+)
+```
+
+### Subclassing ChannelActivity
+
+Override `ChannelActivity` to inject your own logic without reimplementing the full screen:
+
+```kotlin
+class MyChannelActivity : ChannelActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // binding.messagesListView, binding.messageInputView,
+        // and binding.headerView are all available here
+    }
+}
+```
+
+Register your subclass as a custom destination so the UIKit router uses it automatically:
+
+```kotlin
+SceytChatUIKit.navigator.resolve = { destination ->
+    when (destination) {
+        is Destination.Channel -> MyDestinationChannel(destination.channel, destination.targetMessageId)
+        else -> destination
+    }
+}
+```
+
+---
+
+## MessagesListView — embedding in a custom layout
+
+`MessagesListView` is a `ConstraintLayout` subclass that contains only the message recycler, scroll-to-bottom button, and unread-mention jump button. Use it when you want to build your own toolbar or input area from scratch.
+
+```xml
+<!-- res/layout/fragment_chat.xml -->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.sceyt.chatuikit.presentation.components.channel.messages.MessagesListView
+        android:id="@+id/messagesListView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@id/toolbar"
+        app:layout_constraintBottom_toTopOf="@id/messageInputView" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+```
+
+Bind the ViewModel to the view in your Fragment or Activity:
+
+```kotlin
+import com.sceyt.chatuikit.presentation.components.channel.messages.viewmodels.MessageListViewModel
+import com.sceyt.chatuikit.presentation.components.channel.messages.viewmodels.MessageListViewModelFactory
+import com.sceyt.chatuikit.presentation.components.channel.messages.viewmodels.bindings.bind
+
+class ChatFragment : Fragment(R.layout.fragment_chat) {
+
+    private val viewModel: MessageListViewModel by viewModels {
+        MessageListViewModelFactory(channel = requireChannel())
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        val messagesListView = view.findViewById<MessagesListView>(R.id.messagesListView)
+        viewModel.bind(messagesListView, lifecycleOwner = viewLifecycleOwner)
+    }
+}
+```
+
+---
+
+## Supported features
+
+<CardGroup cols={2}>
+  <Card title="Emoji Reactions" icon="face-smile">
+    Tap any message to open the quick-reaction picker. Tap a reaction bubble to view the full reactions bottom sheet. Add custom emoji via the full emoji picker.
+  </Card>
+  <Card title="Reply in Thread" icon="reply">
+    Swipe a message to compose a quick reply, or use the long-press menu to reply inside a dedicated thread view.
+  </Card>
+  <Card title="Voice Messages" icon="microphone">
+    Built-in voice recorder in the input bar. Playback with waveform visualization and seek control directly in the message bubble.
+  </Card>
+  <Card title="Polls" icon="square-poll-vertical">
+    Create polls via `Destination.CreatePoll`. Voters can cast, retract, and view live results; channel owners can end the poll early.
+  </Card>
+  <Card title="Message Forwarding" icon="share">
+    Multi-select messages and forward them to any channel via `Destination.Forward`.
+  </Card>
+  <Card title="Media Attachments" icon="image">
+    Photo and video attachments open in a full-screen `MediaPreviewActivity` with swipe-through gallery support.
+  </Card>
+</CardGroup>
+
+---
+
+## Click listeners
+
+`MessagesListView` exposes three listener interfaces. You only need to implement the callbacks you want to override; defaults handle all standard behaviour.
+
+### MessageClickListeners
+
+```kotlin
+messagesListView.setMessageClickListener(object : MessageClickListeners() {
+    override fun onMessageClick(view: View, item: MessageItem) {
+        // Default shows the quick-reaction popup
+    }
+
+    override fun onMessageLongClick(view: View, item: MessageItem) {
+        // Default triggers multi-select mode
+    }
+
+    override fun onReplyCountClick(view: View, item: MessageItem) {
+        // Default opens the reply-in-thread view
+    }
+})
+```
+
+### MessageActionsViewClickListeners
+
+Handles the actions toolbar (edit, copy, reply, forward, delete, react):
+
+```kotlin
+messagesListView.setMessageActionsClickListener(object : MessageActionsViewClickListeners() {
+    override fun onForwardMessageClick(message: SceytMessage) {
+        SceytChatUIKit.navigator.navigate(context, Destination.Forward(message))
+    }
+
+    override fun onReplyMessageInThreadClick(message: SceytMessage) {
+        // navigate to thread view
+    }
+})
+```
+
+### ReactionPopupClickListeners
+
+```kotlin
+messagesListView.setReactionPopupClickListener(object : ReactionPopupClickListeners() {
+    override fun onAddReaction(message: SceytMessage, key: String) {
+        // key is the emoji string, e.g. "👍"
+    }
+})
+```
+
+---
+
+## Self-destructing media
+
+View-once messages (type `ViewOnce`) open in a dedicated preview that automatically destroys the attachment after it has been viewed. The destination is `Destination.SelfDestructingMediaPreview`:
+
+```kotlin
+// MessagesListView opens this automatically for ViewOnce attachments.
+// You can also open it manually:
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.SelfDestructingMediaPreview(
+        message = message,
+        attachment = attachment
+    )
+)
+```
+
+---
+
+## Style customization
+
+Individual message bubble styles — fonts, colours, corner radii, timestamp position, link preview cards, status icons — are all controlled by `MessageItemStyle`:
+
+```kotlin
+import com.sceyt.chatuikit.styles.messages_list.item.MessageItemStyle
+
+MessageItemStyle.styleCustomizer = StyleCustomizer { context, style ->
+    style.copy(
+        // Customise incoming / outgoing bubble colors, text styles, etc.
+    )
+}
+```
+
+Apply the customizer before any `MessagesListView` is inflated (e.g., in `Application.onCreate()`). For the full list of available properties, see the **Style Customization** reference.

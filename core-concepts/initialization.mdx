@@ -1,0 +1,150 @@
+---
+title: "Initializing the Sceyt Chat Android UIKit"
+sidebarTitle: "Initialization"
+description: "Learn how to initialize SceytChatUIKit in your Application class, configure Koin DI integration, and understand the startup lifecycle."
+---
+
+Calling `SceytChatUIKit.initialize()` in your `Application.onCreate()` is the first and most important step before using any part of the SDK. During initialization the UIKit wires its internal Koin dependency-injection graph, sets up the Room persistence database, bootstraps emoji support (via EmojiCompat and the Google emoji provider), and initializes the underlying `ChatClient` connection layer. Every other API on `SceytChatUIKit` — theming, providers, navigators, and so on — becomes safe to access only after this call completes.
+
+## `SceytChatUIKit.initialize()`
+
+```kotlin
+@JvmStatic
+@JvmOverloads
+fun initialize(
+    appContext: Context,
+    apiUrl: String,
+    appId: String,
+    clientId: String,
+    enableDatabase: Boolean = true,
+)
+```
+
+### Parameters
+
+<ParamField path="appContext" type="Context" required>
+  The Android application `Context`. Pass `applicationContext` from your `Application` subclass — the SDK holds a strong reference to this value internally and uses it to bootstrap Room, WorkManager, and push notification services.
+</ParamField>
+
+<ParamField path="apiUrl" type="String" required>
+  The WebSocket API endpoint for your Sceyt application. Typically in the form `wss://<your-app-id>.sceyt.com`. You can find this value in the **Sceyt dashboard** under your app's connection settings.
+</ParamField>
+
+<ParamField path="appId" type="String" required>
+  The unique identifier of your Sceyt application. This is different from your Android app's package name — it is issued by Sceyt when you create a new application in the dashboard.
+</ParamField>
+
+<ParamField path="clientId" type="String" required>
+  A stable, device-unique string used to identify this particular client instance. A common choice is a UUID persisted to `SharedPreferences` on first launch, ensuring the same device always presents the same `clientId` across sessions.
+</ParamField>
+
+<ParamField path="enableDatabase" type="Boolean" default="true">
+  Controls whether the local Room database is created and used for offline caching of channels, messages, and members. Set to `false` to run in a memory-only mode — useful for guest flows or scenarios where you do not want data persisted to disk.
+</ParamField>
+
+## Basic setup
+
+Place the call inside your custom `Application` class so the SDK is ready before any `Activity` or `Service` starts:
+
+```kotlin
+class MyApplication : Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+
+        SceytChatUIKit.initialize(
+            appContext   = applicationContext,
+            apiUrl       = "wss://your-app-id.sceyt.com",
+            appId        = "your-app-id",
+            clientId     = getOrCreateClientId(),   // stable UUID from SharedPreferences
+            enableDatabase = true
+        )
+    }
+}
+```
+
+Register the class in `AndroidManifest.xml`:
+
+```xml
+<application
+    android:name=".MyApplication"
+    ... >
+```
+
+## Koin integration
+
+The UIKit uses Koin internally. If your own app already calls `startKoin { … }`, the SDK detects the running Koin instance and **attaches its modules to it** rather than starting a second context. You must call `SceytChatUIKit.initialize()` **after** your own `startKoin` block so that the detection works correctly:
+
+```kotlin
+class MyApplication : Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+
+        // Start your own Koin context first
+        startKoin {
+            androidContext(this@MyApplication)
+            modules(appModule, networkModule)
+        }
+
+        // Then initialize the UIKit — it will join the existing Koin context
+        SceytChatUIKit.initialize(
+            appContext   = applicationContext,
+            apiUrl       = "wss://your-app-id.sceyt.com",
+            appId        = "your-app-id",
+            clientId     = getOrCreateClientId()
+        )
+    }
+}
+```
+
+<Warning>
+  If you call `SceytChatUIKit.initialize()` before `startKoin`, the SDK starts its own standalone Koin application. Any Koin modules you register afterward will be in a separate context and will not be able to inject UIKit dependencies, and vice versa.
+</Warning>
+
+## Disabling the local database
+
+Setting `enableDatabase = false` instructs the SDK to skip creating the Room database entirely. All data is kept only in memory during the session.
+
+```kotlin
+SceytChatUIKit.initialize(
+    appContext     = applicationContext,
+    apiUrl         = "wss://your-app-id.sceyt.com",
+    appId          = "your-app-id",
+    clientId       = getOrCreateClientId(),
+    enableDatabase = false   // no Room database, no disk persistence
+)
+```
+
+<Note>
+  Without the database, channel and message history is not available offline. The user will see an empty state until a live connection is established and data is fetched fresh from the server. Use this mode only when you deliberately want to avoid caching data on device — for example in a temporary guest session or an enterprise environment with strict data-residency requirements.
+</Note>
+
+## Sub-objects available after initialization
+
+Once `initialize()` returns, the following top-level properties on `SceytChatUIKit` are safe to read and customize. All of them are lazily created on first access, so you can configure them at any point before (or after) the user connects.
+
+| Property | Type | Purpose |
+|---|---|---|
+| `theme` | `SceytChatUIKitTheme` | Colors, typography, and drawable overrides applied across all built-in screens and components. |
+| `config` | `SceytChatUIKitConfig` | Behavioral settings such as query page sizes, message edit timeout, reaction limits, and channel ordering. |
+| `formatters` | `SceytChatUIKitFormatters` | Replaces the default string formatters for dates, user names, file sizes, and other display text. |
+| `providers` | `SceytChatUIKitProviders` | Visual providers that resolve drawables and colors — for example, message-type icons, attachment icons, and presence-state colors. |
+| `renderers` | `SceytChatUIKitRenderers` | Custom view renderers for message list items; swap in your own `View` subclasses for specific message types. |
+| `notifications` | `SceytNotifications` | Configuration and handlers for push notification appearance and behavior. |
+| `navigator` | `SceytChatUIKitNavigator` | Controls how the SDK navigates between its built-in screens; replace with your own implementation to integrate custom back-stacks or navigation components. |
+| `chatTokenProvider` | `ChatTokenProvider?` | Optional functional interface that the SDK calls automatically when a token expires. Set this for hands-free token refresh. |
+| `messageTransformer` | `MessageTransformer?` | Intercepts outgoing and incoming `Message` objects so you can mutate them — for example, to apply end-to-end encryption or content moderation. |
+
+```kotlin
+// Example: customize a few sub-objects right after initialization
+SceytChatUIKit.initialize(appContext, apiUrl, appId, clientId)
+
+SceytChatUIKit.config.messageEditTimeout      = 30 * 60 * 1000L  // 30 minutes
+SceytChatUIKit.config.defaultReactions        = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
+SceytChatUIKit.chatTokenProvider              = MyTokenProvider()
+```
+
+<Tip>
+  Because all sub-objects are `lazyVar` properties, accessing them before `initialize()` is called will succeed at the property-read level but will fail downstream when any injected dependency (like the Room database) is dereferenced. Always call `initialize()` first.
+</Tip>

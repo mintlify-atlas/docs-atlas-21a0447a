@@ -1,0 +1,107 @@
+---
+title: "Offline Support and Local Data Caching in Sceyt Chat UIKit"
+sidebarTitle: "Offline Support"
+description: "Sceyt Chat Android UIKit stores messages and channels in a local Room database, enabling offline browsing and automatic sync on reconnection."
+---
+
+The Sceyt Chat Android UIKit includes a local persistence layer built on top of Room. Channels, messages, members, and attachment metadata are stored on device, so your users can browse conversations and read history even without a network connection. When connectivity is restored, the UIKit automatically reconciles local state with the server.
+
+## How It Works
+
+On first launch the UIKit fetches channel and message data from the Sceyt platform and writes it into the local Room database. Subsequent opens load from the database first, delivering near-instant rendering before any network round-trip completes. A background sync manager (`SceytSyncManager`) then fetches any deltas from the server and updates the UI reactively through Kotlin Flow.
+
+## Enabling the Database
+
+The database layer is controlled by the `enableDatabase` parameter of `SceytChatUIKit.initialize()`. It is `true` by default.
+
+```kotlin
+SceytChatUIKit.initialize(
+    appContext = this,
+    apiUrl = "https://us-ohio-api.sceyt.com",
+    appId = "your-app-id",
+    clientId = "your-client-id",
+    enableDatabase = true   // default — set false only if you need a stateless client
+)
+```
+
+<Warning>
+Disabling the database removes offline support entirely. Channel list and message list screens will be empty until a live network connection is established.
+</Warning>
+
+## What Is Cached
+
+The following data is persisted locally:
+
+| Entity | Scope |
+|---|---|
+| Channels | All channels the user is a member of |
+| Messages | All messages fetched within open conversations |
+| Members | Channel member list and roles |
+| Attachments | File metadata (path, type, size); binary files are cached on demand |
+
+## Automatic Sync on Reconnect
+
+When `SceytChatUIKit.config.syncChannelsAfterConnect` is `true` (the default), the UIKit triggers a background sync as soon as the WebSocket connection is re-established after a disconnect or app backgrounding. This fetches updated channel metadata and any missed messages.
+
+```kotlin
+// Sync on reconnect is enabled by default. Disable only if you manage sync manually.
+SceytChatUIKit.config.syncChannelsAfterConnect = true
+```
+
+## Accessing Cached Data Programmatically
+
+The `SceytChatUIFacade` exposes the `channelInteractor` for reading cached channel records directly from the database without going through the network:
+
+```kotlin
+val facade = SceytChatUIKit.chatUIFacade
+
+// Retrieve a single channel by ID from the local database
+val channel: SceytChannel? = facade.channelInteractor.getChannelFromDb(channelId)
+
+// Get the count of all locally stored channels
+val count: Int = facade.channelInteractor.getChannelsCountFromDb()
+```
+
+<Note>
+Both `getChannelFromDb` and `getChannelsCountFromDb` are `suspend` functions and must be called from a coroutine or `lifecycleScope`.
+</Note>
+
+## Manual Sync
+
+If your app needs to trigger a sync at a specific moment (for example, when the user performs a pull-to-refresh), use `SceytChatUIKit.chatUIFacade.sceytSyncManager`:
+
+```kotlin
+lifecycleScope.launch {
+    SceytChatUIKit.chatUIFacade.sceytSyncManager.startSync(
+        config = ChannelListConfig(),
+        resultCallback = { result ->
+            result.onSuccess { syncData ->
+                println("Synced ${syncData.syncedChannelsCount} channels")
+            }
+        }
+    )
+}
+```
+
+You can also observe the sync-finished event as a shared flow:
+
+```kotlin
+SceytSyncManager.syncChannelsFinished
+    .onEach { syncChannelData ->
+        // syncChannelData.channels — set of updated SceytChannel objects
+        // syncChannelData.withError — true if the sync completed with errors
+    }
+    .launchIn(lifecycleScope)
+```
+
+## Preventing Duplicate Attachment Uploads
+
+The `preventDuplicateAttachmentUpload` flag (default `true`) tells the UIKit to skip re-uploading a file that has already been successfully transferred, using a content-based fingerprint check.
+
+```kotlin
+SceytChatUIKit.config.preventDuplicateAttachmentUpload = true
+```
+
+<Tip>
+Keep this enabled in production. Disabling it may result in redundant bandwidth usage if a message is retried after a partial failure.
+</Tip>

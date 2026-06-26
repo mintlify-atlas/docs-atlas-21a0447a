@@ -1,47 +1,196 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Sceyt Chat Android UIKit"
+sidebarTitle: "Quickstart"
+description: "Initialize the Sceyt Chat UIKit, connect a user, and render a channel list in your Android app — from zero to working chat in under 10 minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This guide walks you through the minimum steps needed to go from a blank Android project to a working channel list screen backed by the Sceyt Chat API. By the end you will have the UIKit initialized, a user connected, and `ChannelListFragment` displayed inside an Activity — all in under 10 minutes.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+<Step title="Add the dependency">
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Follow the [Installation guide](/installation) to add Maven Central and JitPack to your repository block, then declare the UIKit artifact in your app module:
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
+```kotlin build.gradle.kts
+dependencies {
+    implementation("com.sceyt:sceyt-chat-android-uikit:2.1.5")
+}
+```
+
+</Step>
+
+<Step title="Initialize in your Application class">
+
+Create a custom `Application` subclass (or open the one you already have) and call `SceytChatUIKit.initialize(…)` inside `onCreate`. The method accepts four parameters:
+
+| Parameter | Description |
+|---|---|
+| `appContext` | The Android `Application` context |
+| `apiUrl` | Your Sceyt application API URL (e.g. `"https://us-ohio-api.sceyt.com"`) |
+| `appId` | Your Sceyt application ID |
+| `clientId` | A unique identifier for this device / session |
+| `enableDatabase` | Whether to enable the local Room database for offline caching |
+
+```kotlin MyApplication.kt
+import android.app.Application
+import com.sceyt.chatuikit.SceytChatUIKit
+import java.util.UUID
+
+class MyApplication : Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+
+        SceytChatUIKit.initialize(
+            appContext = this,
+            apiUrl = "https://us-ohio-api.sceyt.com",
+            appId = "YOUR_APP_ID",
+            clientId = UUID.randomUUID().toString(),
+            enableDatabase = true
+        )
+    }
+}
+```
+
+<Note>
+If you are using [Koin](https://insert-koin.io/) for dependency injection, call `startKoin { … }` **before** `SceytChatUIKit.initialize(…)`. Initializing Sceyt first causes the UIKit's internal Koin modules to attach to the wrong application context and can produce runtime errors.
+</Note>
+
+</Step>
+
+<Step title="Declare your Application class in AndroidManifest.xml">
+
+Register the custom `Application` subclass so Android instantiates it at process start, ensuring the UIKit is ready before any Activity or Service runs.
+
+```xml AndroidManifest.xml
+<application
+    android:name=".MyApplication"
+    android:label="@string/app_name"
+    android:icon="@mipmap/ic_launcher"
+    ... >
+
+    <!-- your activities, services, receivers -->
+
+</application>
+```
+
+</Step>
+
+<Step title="Connect a user">
+
+After initialization, establish a connection to the Sceyt Chat API by passing an authentication token. Call this after you have obtained a valid token from your own backend:
+
+```kotlin
+fun connectToSceyt(token: String) {
+    SceytChatUIKit.connect(token)
+}
+```
+
+`SceytChatUIKit.connect` is non-blocking and returns immediately. Connection state changes are emitted through `ConnectionEventManager.onChangedConnectStatusFlow` and can be observed as a Kotlin Flow anywhere in your app.
+
+</Step>
+
+<Step title="Embed ChannelListFragment in an Activity">
+
+`ChannelListFragment` is a self-contained Fragment that renders the full channel list with a search bar, a floating action button for starting new chats, and a live connection-status indicator. Add it to your layout and commit it via the Fragment manager:
+
+```xml activity_main.xml
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/fragmentContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
+```
+
+```kotlin MainActivity.kt
+import androidx.appcompat.app.AppCompatActivity
+import android.os.Bundle
+import com.sceyt.chatuikit.presentation.components.channel_list.channels.ChannelListFragment
+
+class MainActivity : AppCompatActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, ChannelListFragment())
+                .commit()
+        }
+    }
+}
+```
+
+`ChannelListFragment` is an `open` class — subclass it to override `openStartChatActivity()`, `openGlobalSearch()`, or `setupConnectionStatus()` without touching the rest of the UI.
+
+</Step>
+
+<Step title="Handle token expiry">
+
+Sceyt tokens expire. The UIKit exposes two Kotlin Flows on `SceytChatUIKit.chatUIFacade` to let you refresh seamlessly:
+
+| Flow | When it emits |
+|---|---|
+| `onTokenExpired` | The current token has already expired; reconnect immediately with a new token |
+| `onTokenWillExpire` | The token is about to expire; proactively refresh it via `updateToken(…)` |
+
+Collect these flows in a long-lived scope (e.g., inside your `Application` or a background service):
+
+```kotlin MyApplication.kt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+
+class MyApplication : Application() {
+
+    private val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    override fun onCreate() {
+        super.onCreate()
+
+        SceytChatUIKit.initialize(
+            appContext = this,
+            apiUrl = "https://us-ohio-api.sceyt.com",
+            appId = "YOUR_APP_ID",
+            clientId = UUID.randomUUID().toString(),
+            enableDatabase = true
+        )
+
+        observeTokenEvents()
+    }
+
+    private fun observeTokenEvents() {
+        appScope.launch {
+            SceytChatUIKit.chatUIFacade.onTokenExpired.collect {
+                // Fetch a fresh token from your backend, then reconnect
+                val newToken = yourBackend.fetchChatToken()
+                SceytChatUIKit.connect(newToken)
+            }
+        }
+
+        appScope.launch {
+            SceytChatUIKit.chatUIFacade.onTokenWillExpire.collect {
+                // Proactively update the token before it expires
+                val newToken = yourBackend.fetchChatToken()
+                SceytChatUIKit.chatUIFacade.updateToken(newToken) { success, errorMessage ->
+                    if (!success) {
+                        // Fall back to a full reconnect if the update fails
+                        SceytChatUIKit.connect(newToken)
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+</Step>
+
 </Steps>
 
 <Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
-
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+Before shipping to production, explore the [Sceyt Demo App](https://github.com/sceyt/sceyt-chat-android-uikit/tree/dev/examples/SceytDemoApp) on GitHub. It demonstrates the full initialization sequence, custom navigation, push notification setup, deep-link handling, and Koin DI integration in a real application.
 </Tip>

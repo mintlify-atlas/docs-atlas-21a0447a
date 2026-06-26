@@ -1,0 +1,362 @@
+---
+title: "Customizing Component Styles in Sceyt Chat Android UIKit"
+sidebarTitle: "Styles"
+description: "Override any UIKit component's visual style using StyleCustomizer — message bubbles, channel list items, input bar, and every other screen element."
+---
+
+Every visible component in the Sceyt Chat Android UIKit — message bubbles, the channel list, the message input bar, channel info screens, and more — exposes a dedicated style data class. Instead of subclassing views or fiddling with XML attributes, you customize a component by supplying a `StyleCustomizer` lambda that receives the default-built style object and returns a modified copy. This design lets you override as little or as much as you want while keeping the default behavior intact for everything you don't touch.
+
+---
+
+## The `StyleCustomizer<S>` Interface
+
+`StyleCustomizer` is a Kotlin functional interface with a single method:
+
+```kotlin
+fun interface StyleCustomizer<S> {
+    fun apply(context: Context, style: S): S
+}
+```
+
+- **`context`** — the `Context` in which the component is being built (use it to resolve resources, dimensions, or drawables).
+- **`style`** — the fully-initialized default style object. Modify it with `copy()` and return the result.
+
+Because it is a functional interface, you can pass a trailing lambda wherever a `StyleCustomizer<S>` is expected.
+
+---
+
+## How to Apply a Customizer
+
+Each style class exposes a static `styleCustomizer` companion-object property. Assign your lambda to it **once** — before any UI is inflated, typically in `Application.onCreate()`.
+
+<Steps>
+  <Step title="Import the style class">
+    ```kotlin
+    import com.sceyt.chatuikit.styles.messages_list.item.MessageItemStyle
+    import com.sceyt.chatuikit.styles.StyleCustomizer
+    ```
+  </Step>
+  <Step title="Assign a customizer">
+    ```kotlin
+    MessageItemStyle.styleCustomizer = StyleCustomizer { context, style ->
+        style.copy(
+            incomingBubbleBackgroundStyle = style.incomingBubbleBackgroundStyle.copy(
+                backgroundColor = Color.YELLOW
+            ),
+            outgoingBubbleBackgroundStyle = style.outgoingBubbleBackgroundStyle.copy(
+                backgroundColor = Color.GREEN
+            )
+        )
+    }
+    ```
+  </Step>
+  <Step title="Initialize UIKit (if not already done)">
+    ```kotlin
+    SceytChatUIKit.initialize(
+        context        = this,
+        apiUrl         = "https://us-ohio-api.sceyt.com",
+        appId          = "your-app-id",
+        clientId       = UUID.randomUUID().toString(),
+        enableDatabase = true
+    )
+    ```
+    Style customizers must be set before the first view is inflated — putting them in `Application.onCreate()` is safest.
+  </Step>
+</Steps>
+
+---
+
+## Message Bubble Colors
+
+The README demonstrates customizing incoming and outgoing bubble background colors, which is one of the most common style changes:
+
+```kotlin
+import android.graphics.Color
+import com.sceyt.chatuikit.styles.StyleCustomizer
+import com.sceyt.chatuikit.styles.messages_list.item.MessageItemStyle
+
+MessageItemStyle.styleCustomizer = StyleCustomizer { context, style ->
+    style.copy(
+        incomingBubbleBackgroundStyle = style.incomingBubbleBackgroundStyle.copy(
+            backgroundColor = Color.YELLOW
+        ),
+        outgoingBubbleBackgroundStyle = style.outgoingBubbleBackgroundStyle.copy(
+            backgroundColor = Color.GREEN
+        )
+    )
+}
+```
+
+<Tip>
+`incomingBubbleBackgroundStyle` and `outgoingBubbleBackgroundStyle` are themselves `BackgroundStyle` data classes, so you can also adjust corner radii, stroke colors, and other background attributes in the same `copy()` call.
+</Tip>
+
+---
+
+## Channel List Style
+
+`ChannelListViewStyle` governs the entire channel list screen, including its background, empty/loading states, popup menu style, and the per-item appearance nested inside `itemStyle`:
+
+```kotlin
+import com.sceyt.chatuikit.extensions.getCompatColor
+import com.sceyt.chatuikit.styles.StyleCustomizer
+import com.sceyt.chatuikit.styles.channel.ChannelListViewStyle
+
+ChannelListViewStyle.styleCustomizer = StyleCustomizer { context, style ->
+    style.copy(
+        backgroundColor = context.getCompatColor(R.color.my_list_background),
+        showChannelActionAsPopup = true
+    )
+}
+```
+
+To target a specific `ChannelListView` instance (for example, when you embed the channel list in more than one screen), use the per-view helper:
+
+```kotlin
+import com.sceyt.chatuikit.styles.channel.ChannelListViewStyle
+
+// R.id.channelListView is the android:id of the specific view
+ChannelListViewStyle.setStyleCustomizerForViewId(R.id.channelListView) { context, style ->
+    style.copy(showChannelActionAsPopup = false)
+}
+```
+
+<Note>
+If both a global `styleCustomizer` and a view-specific customizer are set, the view-specific customizer takes precedence for that view and the global one is ignored for it.
+</Note>
+
+---
+
+## `StyleRegistry` — Advanced Style Management
+
+Under the hood, built style objects are stored in a thread-safe `StyleRegistry` singleton that survives configuration changes and avoids memory leaks. You can interact with it directly when you need type-safe retrieval of an already-built style — for instance when building a composite screen from multiple independently-styled sub-views.
+
+```kotlin
+import com.sceyt.chatuikit.styles.StyleRegistry
+
+// Retrieve a typed style by its registered ID
+val messageStyle = StyleRegistry.getTyped<MessageItemStyle>("my_message_style_id")
+
+// Retrieve with a fallback default
+val headerStyle = StyleRegistry.getOrDefault<MessagesListHeaderStyle>(viewStyleId) {
+    MessagesListHeaderStyle.Builder(context, attrs).build()
+}
+
+// Register a style manually
+StyleRegistry.register(myCustomStyle)
+
+// Remove a style when its associated view is destroyed
+StyleRegistry.unregister(viewStyleId)
+```
+
+| Method | Description |
+|---|---|
+| `get(id)` | Returns the style for `id`, or `null` if not registered |
+| `set(id, style)` | Registers `style` under `id` (operator form) |
+| `getTyped<T>(id)` | Type-safe get; returns `null` if the type does not match |
+| `getOrDefault<T>(id) { … }` | Returns the registered style or invokes the lambda to build one |
+| `requireTyped<T>(id)` | Same as `getTyped` but throws `IllegalArgumentException` if missing |
+| `register(style, id)` | Named-function alternative to `set` |
+| `unregister(id)` | Removes the entry and returns the removed style |
+| `clear()` | Removes all registered styles |
+
+---
+
+## Style Class Reference
+
+Each style class targets a specific component. All of them follow the same pattern: they are data classes with a companion `styleCustomizer`, and they are built via an internal `Builder` that reads XML attributes and then passes the result through your customizer.
+
+<AccordionGroup>
+  <Accordion title="MessageItemStyle">
+    Controls every visual aspect of an individual message bubble in the message list.
+
+    **Key properties:**
+    - `incomingBubbleBackgroundStyle` / `outgoingBubbleBackgroundStyle` — bubble fill, corners, and stroke
+    - `incomingReplyBackgroundStyle` / `outgoingReplyBackgroundStyle` — quoted-reply container background
+    - `bodyTextStyle` — font, size, and color for message body text
+    - `senderNameTextStyle` — sender label above incoming group messages
+    - `messageDeliveryStatusIcons` — sent/delivered/read tick drawables
+    - `avatarStyle` — inline sender avatar (groups)
+    - `mediaLoaderStyle` — upload/download progress indicator style
+    - `reactionCountTextStyle` / `reactionsContainerBackgroundStyle` — emoji reaction row
+
+    ```kotlin
+    import com.sceyt.chatuikit.styles.messages_list.item.MessageItemStyle
+
+    MessageItemStyle.styleCustomizer = StyleCustomizer { context, style ->
+        style.copy(
+            bodyTextStyle = style.bodyTextStyle.copy(
+                textSize = 16
+            )
+        )
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ChannelListViewStyle">
+    Controls the channel list container — background, empty/loading state layouts, and popup menu theming.
+
+    **Key properties:**
+    - `backgroundColor` — list background color
+    - `emptyState` / `emptySearchState` — `@LayoutRes` for custom empty state views
+    - `loadingState` — `@LayoutRes` for the loading placeholder
+    - `popupStyle` — `@StyleRes` applied to the long-press popup menu
+    - `showChannelActionAsPopup` — whether swipe actions show as a popup or inline
+    - `itemStyle` — nested `ChannelItemStyle` for per-row appearance
+
+    ```kotlin
+    ChannelListViewStyle.styleCustomizer = StyleCustomizer { context, style ->
+        style.copy(backgroundColor = context.getCompatColor(R.color.list_bg))
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ChannelItemStyle">
+    Controls a single row in the channel list.
+
+    **Key properties:**
+    - `titleTextStyle` — channel name text appearance
+    - `lastMessageTextStyle` — subtitle message text appearance
+    - `dateTextStyle` — timestamp text appearance
+    - `unreadCountTextStyle` / `unreadCountMutedTextStyle` — badge text styles
+    - `avatarStyle` — channel avatar appearance
+    - `deliveryStatusIcons` — message status icons shown in the row
+    - `presenceStateColorProvider` — online/offline dot color
+
+    ```kotlin
+    import com.sceyt.chatuikit.styles.channel.ChannelItemStyle
+
+    ChannelItemStyle.styleCustomizer = StyleCustomizer { context, style ->
+        style.copy(
+            titleTextStyle = style.titleTextStyle.copy(
+                textColor = context.getCompatColor(R.color.channel_name_color)
+            )
+        )
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ChannelInfoStyle">
+    Controls the channel info / details screen (`ChannelInfoActivity`).
+
+    **Key properties:**
+    - `backgroundColor` / `borderColor` / `dividerColor` — page chrome
+    - `spaceBetweenSections` — vertical gap in pixels between content sections
+    - `toolBarStyle` — toolbar / app bar style
+    - `detailsStyle` — avatar, name, and member-count row
+    - `descriptionStyle` — description text section
+    - `uriStyle` — channel URI / link section
+    - `settingsStyle` / `optionsStyle` — settings and action option rows
+    - `tabBarStyle` — media / files / links / voice tab bar
+    - `showGroupsInCommon` — whether to show "Groups in Common" section
+
+    ```kotlin
+    import com.sceyt.chatuikit.styles.channel_info.ChannelInfoStyle
+
+    ChannelInfoStyle.styleCustomizer = StyleCustomizer { context, style ->
+        style.copy(
+            backgroundColor = context.getCompatColor(R.color.info_bg)
+        )
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="MessagesListHeaderStyle">
+    Controls the app bar shown above the message thread.
+
+    **Key properties:**
+    - `backgroundColor` — toolbar fill color
+    - `underlineColor` / `showUnderline` — optional bottom separator
+    - `navigationIcon` — back/up button drawable
+    - `titleTextStyle` — channel name text in the toolbar
+    - `subTitleStyle` — "online" / "N members" subtitle text
+    - `avatarStyle` — avatar thumbnail in the toolbar
+    - `showChannelEventsInSequence` — whether typing/recording events cycle sequentially
+    - `enableChannelEventIndicator` — animated dot during typing/recording
+    - `titleFormatter` — overrides how the title is rendered (also accepts a per-item `Formatter`)
+    - `channelAvatarRenderer` — custom renderer for the toolbar avatar
+
+    ```kotlin
+    import com.sceyt.chatuikit.styles.messages_list.MessagesListHeaderStyle
+
+    MessagesListHeaderStyle.styleCustomizer = StyleCustomizer { context, style ->
+        style.copy(
+            backgroundColor = context.getCompatColor(R.color.toolbar_bg),
+            showUnderline   = false
+        )
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="MessageInputStyle">
+    Controls the message composition bar at the bottom of the message thread (`MessageInputView`).
+
+    **Key properties:**
+    - `backgroundColor` — input area background
+    - `dividerColor` — top separator color
+    - `sendIconBackgroundColor` — send button circle fill color
+    - `attachmentIcon` / `sendMessageIcon` / `voiceRecordIcon` — action button drawables
+    - `enableVoiceRecord` / `enableSendAttachment` / `enableMention` / `enableTextStyling` — feature toggles
+    - `inputStyle` — inner `TextInputStyle` (hint, cursor, text appearance)
+    - `replyMessageStyle` / `editMessageStyle` — inline reply / edit preview style
+    - `mentionUsersListStyle` — suggestion list style
+
+    ```kotlin
+    import com.sceyt.chatuikit.styles.input.MessageInputStyle
+
+    MessageInputStyle.styleCustomizer = StyleCustomizer { context, style ->
+        style.copy(
+            enableVoiceRecord = false,
+            backgroundColor   = context.getCompatColor(R.color.input_bg)
+        )
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Complete Example
+
+The snippet below shows multiple customizers applied together in `Application.onCreate()`:
+
+```kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        SceytChatUIKit.initialize(
+            context        = this,
+            apiUrl         = "https://us-ohio-api.sceyt.com",
+            appId          = "your-app-id",
+            clientId       = UUID.randomUUID().toString(),
+            enableDatabase = true
+        )
+
+        // Bubble colors
+        MessageItemStyle.styleCustomizer = StyleCustomizer { context, style ->
+            style.copy(
+                incomingBubbleBackgroundStyle = style.incomingBubbleBackgroundStyle.copy(
+                    backgroundColor = context.getCompatColor(R.color.bubble_incoming)
+                ),
+                outgoingBubbleBackgroundStyle = style.outgoingBubbleBackgroundStyle.copy(
+                    backgroundColor = context.getCompatColor(R.color.bubble_outgoing)
+                )
+            )
+        }
+
+        // Channel list background
+        ChannelListViewStyle.styleCustomizer = StyleCustomizer { context, style ->
+            style.copy(
+                backgroundColor      = context.getCompatColor(R.color.list_bg),
+                showChannelActionAsPopup = true
+            )
+        }
+
+        // Input bar
+        MessageInputStyle.styleCustomizer = StyleCustomizer { context, style ->
+            style.copy(enableVoiceRecord = false)
+        }
+    }
+}
+```

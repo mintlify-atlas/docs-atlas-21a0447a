@@ -1,0 +1,553 @@
+---
+title: "ChannelInteractor — Channel Operations API Reference"
+sidebarTitle: "ChannelInteractor"
+description: "Full method reference for ChannelInteractor: load, create, edit, mute, pin, hide, delete channels and manage unread counts and draft messages."
+---
+
+`ChannelInteractor` is the primary interface for all channel-level operations in the Sceyt Chat Android UIKit. It is accessible via `SceytChatUIKit.chatUIFacade.channelInteractor`. All methods are `suspend` functions unless stated otherwise, and most return either a `SceytResponse<T>` (for single-result operations) or a `Flow<PaginationResponse<SceytChannel>>` (for paginated list operations). `SceytResponse` is a sealed class with `Success` and `Error` variants, making exhaustive handling straightforward.
+
+**Package:** `com.sceyt.chatuikit.persistence.interactor`
+
+```kotlin
+val interactor: ChannelInteractor = SceytChatUIKit.chatUIFacade.channelInteractor
+```
+
+---
+
+## Loading Channels
+
+<ResponseField name="loadChannels" type="suspend fun → Flow&lt;PaginationResponse&lt;SceytChannel&gt;&gt;">
+  Loads a paginated list of channels. Results are emitted from the local database first, then updated with the server response. The flow closes when all data has been delivered.
+
+  ```kotlin
+  interactor.loadChannels(
+      offset           = 0,
+      searchQuery      = "",
+      loadKey          = LoadKeyData(),
+      onlyMine         = false,
+      ignoreDb         = false,
+      awaitForConnection = false,
+      config           = ChannelListConfig.default
+  ).collect { response ->
+      when (response) {
+          is PaginationResponse.DBResponse -> updateUiFromDb(response.data)
+          is PaginationResponse.ServerResponse -> updateUiFromServer(response.data)
+          else -> {}
+      }
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="offset" type="Int" required>
+      Zero-based pagination offset (number of items already loaded).
+    </ParamField>
+    <ParamField path="searchQuery" type="String" required>
+      Text to filter channel subjects. Pass an empty string to load all channels.
+    </ParamField>
+    <ParamField path="loadKey" type="LoadKeyData?" required>
+      A key used to deduplicate in-flight requests and correlate responses; pass `null` or `LoadKeyData()` for a fresh load.
+    </ParamField>
+    <ParamField path="onlyMine" type="Boolean" required>
+      When `true`, only channels where the current user is a member are returned.
+    </ParamField>
+    <ParamField path="ignoreDb" type="Boolean" required>
+      When `true`, skips the local database and fetches directly from the server.
+    </ParamField>
+    <ParamField path="awaitForConnection" type="Boolean" required>
+      When `true`, suspends the call until the client is connected before issuing a server request.
+    </ParamField>
+    <ParamField path="config" type="ChannelListConfig" required>
+      Specifies channel types, sort order, page size, and query parameters. Use `ChannelListConfig.default` for standard behaviour.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="searchChannelsWithUserIds" type="suspend fun → Flow&lt;PaginationResponse&lt;SceytChannel&gt;&gt;">
+  Searches channels that contain the specified user IDs, optionally also matching a subject query. Useful for finding direct or group channels with specific participants.
+
+  ```kotlin
+  interactor.searchChannelsWithUserIds(
+      offset                       = 0,
+      searchQuery                  = "",
+      userIds                      = listOf("user-abc", "user-xyz"),
+      config                       = ChannelListConfig.default,
+      includeSearchByUserDisplayName = true,
+      onlyMine                     = true,
+      ignoreDb                     = false,
+      loadKey                      = null,
+      directChatType               = "direct"
+  ).collect { response -> /* handle */ }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="offset" type="Int" required>
+      Zero-based pagination offset.
+    </ParamField>
+    <ParamField path="searchQuery" type="String" required>
+      Optional subject text filter. Pass an empty string to match any subject.
+    </ParamField>
+    <ParamField path="userIds" type="List&lt;String&gt;" required>
+      IDs of users that must be members of the returned channels.
+    </ParamField>
+    <ParamField path="config" type="ChannelListConfig" required>
+      Channel list configuration (types, order, limit, query params).
+    </ParamField>
+    <ParamField path="includeSearchByUserDisplayName" type="Boolean" required>
+      When `true`, also matches channels whose members' display names contain the `searchQuery`.
+    </ParamField>
+    <ParamField path="onlyMine" type="Boolean" required>
+      When `true`, restricts results to channels the current user belongs to.
+    </ParamField>
+    <ParamField path="ignoreDb" type="Boolean" required>
+      When `true`, bypasses the local database cache.
+    </ParamField>
+    <ParamField path="loadKey" type="LoadKeyData?" required>
+      Deduplication key for the request.
+    </ParamField>
+    <ParamField path="directChatType" type="String">
+      The channel-type identifier for direct chats. Default: `"direct"`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getChannelsBySQLiteQuery" type="suspend fun → List&lt;SceytChannel&gt;">
+  Executes a raw SQLite query against the local channel database. Use for advanced offline filtering not supported by the standard API.
+
+  ```kotlin
+  val query = SimpleSQLiteQuery("SELECT * FROM channels WHERE pinned = 1")
+  val pinnedChannels: List<SceytChannel> = interactor.getChannelsBySQLiteQuery(query)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="query" type="SimpleSQLiteQuery" required>
+      A `SimpleSQLiteQuery` wrapping a raw SQL string with optional bind arguments.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="syncChannels" type="suspend fun → Flow&lt;SyncResult&lt;SceytChannel&gt;&gt;">
+  Forces a full server-side channel sync using the supplied config. Emits `SyncResult` events as pages of channels are fetched and persisted.
+
+  ```kotlin
+  interactor.syncChannels(ChannelListConfig.default)
+      .collect { result -> /* handle sync progress */ }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="config" type="ChannelListConfig" required>
+      Configuration governing which channel types and how many to sync per page.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Read Status
+
+<ResponseField name="markChannelAsRead" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Marks all messages in the channel as read and resets the unread count to zero.
+
+  ```kotlin
+  when (val result = interactor.markChannelAsRead(channelId)) {
+      is SceytResponse.Success -> { /* updated channel in result.data */ }
+      is SceytResponse.Error   -> { /* handle error */ }
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to mark as read.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="markChannelAsUnRead" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Marks the channel as having unread messages, causing it to appear with an unread indicator.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to mark as unread.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## History and Deletion
+
+<ResponseField name="clearHistory" type="suspend fun → SceytResponse&lt;Long&gt;">
+  Deletes all messages in the channel. Returns the channel ID on success.
+
+  ```kotlin
+  interactor.clearHistory(channelId = 42L, forEveryone = false)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel whose history to clear.
+    </ParamField>
+    <ParamField path="forEveryone" type="Boolean" required>
+      When `true`, clears history for all participants; when `false`, only for the current user.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="blockAndLeaveChannel" type="suspend fun → SceytResponse&lt;Long&gt;">
+  Blocks the channel and removes the current user from it simultaneously. Typically used for direct channels to prevent future messages from that peer.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to block and leave.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="unblockChannel" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Removes the block on a previously blocked channel.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to unblock.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="deleteChannel" type="suspend fun → SceytResponse&lt;Long&gt;">
+  Permanently deletes the channel and all its messages. The caller must have owner or admin privileges. Returns the deleted channel's ID on success.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to delete.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="leaveChannel" type="suspend fun → SceytResponse&lt;Long&gt;">
+  Removes the current user from the channel without deleting it.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to leave.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Creating Channels
+
+<ResponseField name="findOrCreatePendingChannelByMembers" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Finds an existing pending channel with the given members, or creates a new one. Used internally for optimistic channel creation before server confirmation.
+
+  <Expandable title="Parameters">
+    <ParamField path="data" type="CreateChannelData" required>
+      Data object describing the channel to find or create (members, type, metadata, etc.).
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="findOrCreatePendingChannelByUri" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Finds an existing pending channel by URI, or creates a new one with the given URI.
+
+  <Expandable title="Parameters">
+    <ParamField path="data" type="CreateChannelData" required>
+      Data object including the target URI and channel configuration.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="createChannel" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Creates a new channel on the server with the provided configuration data.
+
+  ```kotlin
+  val result = interactor.createChannel(
+      CreateChannelData(
+          channelType = "group",
+          subject     = "Team Chat",
+          members     = listOf(memberData1, memberData2)
+      )
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="createChannelData" type="CreateChannelData" required>
+      Describes the channel: type, subject, URI, avatar, metadata, and initial member list.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Muting and Auto-Delete
+
+<ResponseField name="muteChannel" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Mutes notifications for the channel until the specified epoch timestamp in milliseconds. Pass `Long.MAX_VALUE` to mute indefinitely.
+
+  ```kotlin
+  interactor.muteChannel(channelId, muteUntil = System.currentTimeMillis() + 3_600_000L)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to mute.
+    </ParamField>
+    <ParamField path="muteUntil" type="Long" required>
+      Unix epoch milliseconds until which the channel remains muted.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="unMuteChannel" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Re-enables notifications for a previously muted channel.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to unmute.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="enableAutoDelete" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Enables auto-delete for messages in the channel after the specified period.
+
+  ```kotlin
+  interactor.enableAutoDelete(channelId, period = 7.days.inWholeMilliseconds)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel.
+    </ParamField>
+    <ParamField path="period" type="Long" required>
+      Duration in milliseconds after which messages are automatically deleted.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="disableAutoDelete" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Turns off auto-delete for the channel, retaining all existing messages.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Pinning
+
+<ResponseField name="pinChannel" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Pins the channel so it appears at the top of the channel list for the current user.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to pin.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="unpinChannel" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Removes the pin from a previously pinned channel.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to unpin.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Fetching Channels
+
+<ResponseField name="getChannelFromDb" type="suspend fun → SceytChannel?">
+  Returns the channel from the local database, or `null` if it is not cached.
+
+  ```kotlin
+  val channel: SceytChannel? = interactor.getChannelFromDb(channelId)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to look up.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getChannelsFromDb" type="suspend fun → List&lt;SceytChannel&gt;">
+  Returns multiple channels from the local database by their IDs.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelIds" type="List&lt;Long&gt;" required>
+      A list of numeric channel IDs to look up.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getDirectChannelFromDb" type="suspend fun → SceytChannel?">
+  Looks up the direct (1-to-1) channel with the specified peer user from the local database.
+
+  <Expandable title="Parameters">
+    <ParamField path="peerId" type="String" required>
+      The user ID of the peer in the direct channel.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getChannelFromServer" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Fetches the latest channel data from the server and updates the local database.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to fetch.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getChannelByInviteKey" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Looks up a channel using its invite key string. Does not join the channel.
+
+  <Expandable title="Parameters">
+    <ParamField path="inviteKey" type="String" required>
+      The channel invite key (from a deep link, for example).
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getChannelFromServerByUri" type="suspend fun → SceytResponse&lt;SceytChannel?&gt;">
+  Fetches a channel by its public URI from the server.
+
+  <Expandable title="Parameters">
+    <ParamField path="uri" type="String" required>
+      The public URI (handle/slug) of the channel.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getChannelsCountFromDb" type="suspend fun → Int">
+  Returns the total number of channels stored in the local database.
+
+  ```kotlin
+  val count: Int = interactor.getChannelsCountFromDb()
+  ```
+</ResponseField>
+
+---
+
+## Editing
+
+<ResponseField name="editChannel" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Updates the channel's subject, description, avatar, metadata, or URI.
+
+  ```kotlin
+  interactor.editChannel(
+      channelId = 42L,
+      data      = EditChannelData(subject = "New Team Name")
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to edit.
+    </ParamField>
+    <ParamField path="data" type="EditChannelData" required>
+      Holds the fields to update. Only non-null fields are changed.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Joining
+
+<ResponseField name="join" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Joins the current user to a public channel.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the public channel to join.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="joinWithInviteKey" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Joins a channel using an invite key, which may be for a private channel.
+
+  <Expandable title="Parameters">
+    <ParamField path="inviteKey" type="String" required>
+      The invite key obtained from a deep link or shared URL.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Hiding
+
+<ResponseField name="hideChannel" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Hides the channel from the channel list without leaving it. The channel reappears when a new message arrives.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to hide.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="unHideChannel" type="suspend fun → SceytResponse&lt;SceytChannel&gt;">
+  Makes a previously hidden channel visible again in the channel list.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel to unhide.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Unread Counts and Draft
+
+<ResponseField name="getTotalUnreadCount" type="fun → Flow&lt;Long&gt;">
+  Returns a hot `Flow` that emits the total unread message count across channels, optionally filtered by channel type. Emits a new value whenever the count changes.
+
+  ```kotlin
+  interactor.getTotalUnreadCount(channelTypes = listOf("direct", "group"))
+      .onEach { count -> updateBadge(count) }
+      .launchIn(lifecycleScope)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="channelTypes" type="List&lt;String&gt;">
+      Channel type identifiers to include in the count. Pass an empty list (default) to count all channel types.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getChannelMessageCount" type="fun → Flow&lt;Long&gt;">
+  Returns a hot `Flow` that emits the total number of messages in a specific channel from the local database.
+
+  <Expandable title="Parameters">
+    <ParamField path="channelId" type="Long" required>
+      The numeric ID of the channel.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="updateDraftMessage" type="suspend fun">
+  Persists a draft message for the channel to the local database. The draft is displayed in the channel list and restored when the user reopens the conversation.
+
+  ```kotlin
+  interactor.updateDraftMessage(
+      DraftMessage(channelId = 42L, message = "I was typing this...")
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="draftMessage" type="DraftMessage" required>
+      A `DraftMessage` object containing the channel ID and the draft text (and optional reply/mention data).
+    </ParamField>
+  </Expandable>
+</ResponseField>

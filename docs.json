@@ -1,72 +1,110 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mintlify Starter Kit",
+  "name": "Sceyt Chat Android UIKit",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
-  },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "pages": [
-      {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "primary": "#6B4EFF",
+    "light": "#EDE8FF",
+    "dark": "#3D2DB5"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://app.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/sceyt/sceyt-chat-android-uikit"
     }
-  },
-  "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "mcp",
-      "cursor",
-      "vscode"
-    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/sceyt/sceyt-chat-android-uikit"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/initialization",
+              "core-concepts/connection",
+              "core-concepts/authentication"
+            ]
+          },
+          {
+            "group": "UI Components",
+            "pages": [
+              "components/channel-list",
+              "components/channel-messages",
+              "components/channel-info",
+              "components/create-channel",
+              "components/global-search"
+            ]
+          },
+          {
+            "group": "Customization",
+            "pages": [
+              "customization/theming",
+              "customization/styles",
+              "customization/formatters",
+              "customization/providers-renderers"
+            ]
+          },
+          {
+            "group": "Push Notifications",
+            "pages": [
+              "notifications/push-notifications",
+              "notifications/notification-customization"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/navigation",
+              "advanced/offline-support",
+              "advanced/media-handling",
+              "advanced/proguard"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api-reference/sceyt-chat-uikit",
+              "api-reference/sceyt-chat-ui-facade",
+              "api-reference/configuration"
+            ]
+          },
+          {
+            "group": "Interactors",
+            "pages": [
+              "api-reference/channel-interactor",
+              "api-reference/message-interactor",
+              "api-reference/user-interactor",
+              "api-reference/attachment-interactor"
+            ]
+          },
+          {
+            "group": "Styles & Theming",
+            "pages": [
+              "api-reference/style-customizer",
+              "api-reference/style-registry"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

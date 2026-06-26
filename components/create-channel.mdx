@@ -1,0 +1,170 @@
+---
+title: "Create Channels and Groups in Sceyt Chat Android UIKit"
+sidebarTitle: "Create Channel"
+description: "Open the built-in create channel or create group flows using Destination.CreateChannel and Destination.CreateGroup, with member selection and settings."
+---
+
+The Sceyt Chat Android UIKit ships four ready-to-use creation flows — start a direct message, create a broadcast channel, create a group, and pick users to add as members. Each flow is a dedicated `Activity` reachable through a typed `Destination`. You never need to build these screens from scratch; just navigate to the right destination and the UIKit handles the full flow including member selection and the first system message.
+
+## Destination.StartChat — begin a direct message
+
+`StartChat` opens `StartChatActivity`, which lets the user search for and select another user to open a 1-to-1 conversation.
+
+```kotlin
+import com.sceyt.chatuikit.SceytChatUIKit
+import com.sceyt.chatuikit.navigation.Destination
+import com.sceyt.chatuikit.navigation.navigate
+
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.StartChat()
+)
+```
+
+This is the same action triggered by the FAB in `ChannelListFragment`. After the user selects a contact, the flow navigates directly to `ChannelActivity` for that 1-to-1 channel.
+
+---
+
+## Destination.CreateChannel — create a broadcast channel
+
+`CreateChannel` opens `CreateChannelActivity`. The user fills in the channel name and avatar, then a `SelectUsersActivity` is shown automatically so subscribers can be added before the channel opens.
+
+```kotlin
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.CreateChannel()
+)
+```
+
+<Steps>
+  <Step title="User enters channel details">
+    Name, avatar, and description are entered in `CreateChannelDetailsFragment`.
+  </Step>
+  <Step title="System message is sent">
+    A silent `ChannelCreated` system message is posted to mark the channel creation in the timeline.
+  </Step>
+  <Step title="Subscriber picker opens">
+    `SelectUsersActivity` is launched via `ActivityResultLauncher`. Selected users are added as `Subscriber` role members.
+  </Step>
+  <Step title="Channel conversation opens">
+    The flow finishes by navigating to `Destination.Channel` for the newly created channel.
+  </Step>
+</Steps>
+
+---
+
+## Destination.CreateGroup — create a group chat
+
+`CreateGroup` opens `CreateGroupActivity` with a pre-seeded member list. Pass the `SceytMember` objects you already have (e.g., from a prior `SelectUsers` call):
+
+```kotlin
+import com.sceyt.chatuikit.data.models.channels.SceytMember
+import com.sceyt.chatuikit.navigation.Destination
+
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.CreateGroup(members = selectedMembers)
+)
+```
+
+If you do not have members yet, show the user picker first and then open `CreateGroup` in the result callback:
+
+```kotlin
+// 1. Open the user picker
+val launcher = registerForActivityResult(
+    ActivityResultContracts.StartActivityForResult()
+) { result ->
+    if (result.resultCode == RESULT_OK) {
+        val data = result.data
+            ?.parcelable<SelectUsersResult>(SelectUsersActivity.SELECTED_USERS_RESULT)
+            ?: return@registerForActivityResult
+
+        val members = data.selectedUsers.map { user ->
+            SceytMember(Role(MemberTypeEnum.Member.toRole()), user)
+        }
+
+        // 2. Open the group creation screen with selected members
+        SceytChatUIKit.navigator.navigate(
+            this,
+            Destination.CreateGroup(members)
+        )
+    }
+}
+
+// Open the picker
+SceytChatUIKit.navigator.navigateForResult(
+    context = this,
+    launcher = launcher,
+    destination = Destination.SelectUsers(
+        SelectUsersPageArgs(toolbarTitle = "Select Members")
+    )
+)
+```
+
+---
+
+## Destination.SelectUsers — user picker
+
+`SelectUsers` opens `SelectUsersActivity` — a searchable list with multi-select chip bar. Pass a `SelectUsersPageArgs` to control the toolbar title and whether the confirm button is always active:
+
+```kotlin
+import com.sceyt.chatuikit.navigation.Destination
+import com.sceyt.chatuikit.presentation.components.select_users.SelectUsersPageArgs
+
+SceytChatUIKit.navigator.navigateForResult(
+    context = this,
+    launcher = myLauncher,
+    destination = Destination.SelectUsers(
+        args = SelectUsersPageArgs(
+            toolbarTitle = "Add Members",
+            actionButtonAlwaysEnable = false
+        )
+    )
+)
+```
+
+The result `Intent` contains a `SelectUsersResult` parcelable under the key `SelectUsersActivity.SELECTED_USERS_RESULT`.
+
+---
+
+## Configuring channel type names
+
+The UIKit uses `ChannelTypesConfig` inside `SceytChatUIKitConfig` to map logical channel types to the string names sent to the Sceyt server. Configure it once during SDK initialisation:
+
+```kotlin
+import com.sceyt.chatuikit.SceytChatUIKit
+import com.sceyt.chatuikit.config.ChannelTypesConfig
+
+SceytChatUIKit.config.channelTypesConfig = ChannelTypesConfig(
+    direct    = "direct",      // 1-to-1 conversations
+    group     = "group",       // private groups
+    broadcast = "broadcast"    // public broadcast channels
+)
+```
+
+The `ChannelTypesConfig` also exposes two helpers:
+
+```kotlin
+val config = SceytChatUIKit.config.channelTypesConfig
+
+// Returns ["broadcast"] — channel types shown in global search / discovery
+val discoverableTypes: List<String> = config.getDiscoverableTypes()
+
+// Returns ["direct", "group"] — channel types that are private
+val privateTypes: List<String> = config.getPrivateTypes()
+```
+
+<Note>
+  Type names must exactly match the channel types configured in your Sceyt application dashboard. Mismatches will cause creation or search errors.
+</Note>
+
+---
+
+## Summary of Destinations
+
+| Destination | Activity opened | Typical use case |
+|------------|----------------|-----------------|
+| `Destination.StartChat()` | `StartChatActivity` | New 1-to-1 conversation |
+| `Destination.CreateChannel()` | `CreateChannelActivity` | New broadcast channel with subscribers |
+| `Destination.CreateGroup(members)` | `CreateGroupActivity` | New private group with selected members |
+| `Destination.SelectUsers(args)` | `SelectUsersActivity` | Generic user picker, returns `SelectUsersResult` |

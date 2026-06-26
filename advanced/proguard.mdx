@@ -1,0 +1,85 @@
+---
+title: "ProGuard Rules for Sceyt Chat Android UIKit"
+sidebarTitle: "ProGuard"
+description: "Add the required ProGuard keep rules for Sceyt Chat Android UIKit to prevent obfuscation from stripping necessary classes."
+---
+
+When you build a release APK or AAB with code shrinking enabled, ProGuard (or R8) renames and strips classes that it considers unused. The Sceyt Chat Android UIKit relies on reflection-based serialization, Room entity mapping, and internal class name lookups that break silently when class names are obfuscated. Adding the keep rules below ensures the UIKit continues to work correctly in minified builds.
+
+## Required Keep Rule
+
+Add the following rule to your app module's ProGuard configuration file (`app/proguard-rules.pro`):
+
+```text
+# Keep all necessary classes in 'com.sceyt.chatuikit' package and its subpackages
+-keep class com.sceyt.chatuikit.** { *; }
+```
+
+This single wildcard rule preserves every class, interface, and member inside the `com.sceyt.chatuikit` package tree.
+
+<Warning>
+Omitting this rule causes runtime crashes in release builds. Typical failure modes include `ClassNotFoundException` during navigation, corrupted Room database queries, and push notification payloads that fail to deserialize.
+</Warning>
+
+## Where to Add the Rule
+
+<Steps>
+  <Step title="Open your app module ProGuard file">
+    The file is located at `app/proguard-rules.pro` in a standard Android project layout. If it does not exist, create it in the `app/` directory.
+  </Step>
+  <Step title="Append the keep rule">
+    ```text
+    # Sceyt Chat Android UIKit
+    -keep class com.sceyt.chatuikit.** { *; }
+    ```
+  </Step>
+  <Step title="Verify proguardFiles in build.gradle">
+    Make sure your release build type references the file:
+
+    ```kotlin
+    // build.gradle.kts (app module)
+    android {
+        buildTypes {
+            release {
+                isMinifyEnabled = true
+                proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro"
+                )
+            }
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Consumer Rules
+
+The UIKit library ships its own `consumer-rules.pro` that already keeps the underlying Sceyt Chat SDK model classes:
+
+```text
+-keep class com.sceyt.chat.models.** { *; }
+-keep class com.sceyt.chat.wrapper.** { *; }
+-keep class com.sceyt.chat.callback.** { *; }
+
+-keep class com.masoudss.** { *; }
+-dontwarn com.masoudss.**
+```
+
+Consumer rules are applied automatically to any app that depends on the library, so you do **not** need to copy these into your own `proguard-rules.pro`. However, you still need the `com.sceyt.chatuikit.**` rule above, because that covers the UIKit layer itself rather than the underlying SDK.
+
+<Note>
+If you use the `consumerProguardFiles` mechanism in your own library modules that wrap the UIKit, you can propagate the UIKit keep rule there instead of adding it to the app module directly.
+</Note>
+
+## Full Recommended Configuration
+
+```text
+# app/proguard-rules.pro
+
+# Sceyt Chat Android UIKit — required to prevent runtime crashes in release builds
+-keep class com.sceyt.chatuikit.** { *; }
+
+# Keep line number information for readable stack traces (recommended)
+-keepattributes SourceFile,LineNumberTable
+```

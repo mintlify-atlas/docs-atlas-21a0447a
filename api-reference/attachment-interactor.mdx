@@ -1,0 +1,245 @@
+---
+title: "AttachmentInteractor — File and Media Attachment API"
+sidebarTitle: "AttachmentInteractor"
+description: "Reference for AttachmentInteractor: load channel file attachments by type — media, files, voice messages, and links — in Sceyt Chat Android UIKit."
+---
+
+`AttachmentInteractor` provides all operations for browsing, loading, and managing message attachments within a channel. It is accessible via `SceytChatUIKit.chatUIFacade.attachmentInteractor`. Use it to implement media galleries, file browsers, voice-message lists, and link-preview feeds — each filtered by attachment type. Paginated methods return a `Flow<PaginationResponse<AttachmentWithUserData>>`, which emits locally cached results first and then updates from the server. Utility methods handle file checksum deduplication, link preview fetching, and transfer-state tracking.
+
+**Package:** `com.sceyt.chatuikit.persistence.interactor`
+
+```kotlin
+val interactor: AttachmentInteractor = SceytChatUIKit.chatUIFacade.attachmentInteractor
+```
+
+---
+
+## Paginating Attachments
+
+<ResponseField name="getPrevAttachments" type="suspend fun → Flow&lt;PaginationResponse&lt;AttachmentWithUserData&gt;&gt;">
+  Loads attachments older than `lastAttachmentId` (backward pagination). Each emission contains an `AttachmentWithUserData` list, pairing the attachment with its sender's profile data.
+
+  ```kotlin
+  interactor.getPrevAttachments(
+      conversationId   = channelId,
+      lastAttachmentId = oldestLoadedAttachmentId,
+      types            = listOf("image", "video"),
+      offset           = 0,
+      ignoreDb         = false,
+      loadKeyData      = LoadKeyData()
+  ).collect { response ->
+      when (response) {
+          is PaginationResponse.DBResponse     -> renderFromCache(response.data)
+          is PaginationResponse.ServerResponse -> renderFromServer(response.data)
+          else -> {}
+      }
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      The channel ID whose attachment history is being browsed.
+    </ParamField>
+    <ParamField path="lastAttachmentId" type="Long" required>
+      The server-assigned ID of the oldest attachment currently visible. Older items are fetched relative to this.
+    </ParamField>
+    <ParamField path="types" type="List&lt;String&gt;" required>
+      Attachment type filter. Common values: `"image"`, `"video"`, `"file"`, `"voice"`, `"link"`. Pass multiple types to load a mixed gallery.
+    </ParamField>
+    <ParamField path="offset" type="Int" required>
+      Zero-based count of attachments already loaded in this direction.
+    </ParamField>
+    <ParamField path="ignoreDb" type="Boolean">
+      When `true`, bypasses the local cache and fetches directly from the server. Default: `false`.
+    </ParamField>
+    <ParamField path="loadKeyData" type="LoadKeyData">
+      Deduplication and correlation key for the request. Default: `LoadKeyData()`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getNextAttachments" type="suspend fun → Flow&lt;PaginationResponse&lt;AttachmentWithUserData&gt;&gt;">
+  Loads attachments newer than `lastAttachmentId` (forward pagination). Use this when implementing a media viewer that allows navigating towards more recent files.
+
+  ```kotlin
+  interactor.getNextAttachments(
+      conversationId   = channelId,
+      lastAttachmentId = newestLoadedAttachmentId,
+      types            = listOf("file"),
+      offset           = 0
+  ).collect { response -> /* handle */ }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      The channel ID being browsed.
+    </ParamField>
+    <ParamField path="lastAttachmentId" type="Long" required>
+      The server-assigned ID of the newest attachment currently visible.
+    </ParamField>
+    <ParamField path="types" type="List&lt;String&gt;" required>
+      Attachment type filter (e.g. `"image"`, `"video"`, `"file"`, `"voice"`).
+    </ParamField>
+    <ParamField path="offset" type="Int" required>
+      Zero-based count of attachments already loaded in this direction.
+    </ParamField>
+    <ParamField path="ignoreDb" type="Boolean">
+      When `true`, skips the local cache. Default: `false`.
+    </ParamField>
+    <ParamField path="loadKeyData" type="LoadKeyData">
+      Request deduplication key. Default: `LoadKeyData()`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getNearAttachments" type="suspend fun → Flow&lt;PaginationResponse&lt;AttachmentWithUserData&gt;&gt;">
+  Loads attachments surrounding a specific `attachmentId`. Useful for opening a media viewer at a particular item and needing context items on both sides for swipe navigation.
+
+  ```kotlin
+  interactor.getNearAttachments(
+      conversationId = channelId,
+      attachmentId   = focusedAttachmentId,
+      types          = listOf("image", "video"),
+      offset         = 0
+  ).collect { response -> /* render viewer context */ }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="conversationId" type="Long" required>
+      The channel ID being browsed.
+    </ParamField>
+    <ParamField path="attachmentId" type="Long" required>
+      The server-assigned ID of the anchor attachment.
+    </ParamField>
+    <ParamField path="types" type="List&lt;String&gt;" required>
+      Attachment type filter.
+    </ParamField>
+    <ParamField path="offset" type="Int" required>
+      Zero-based pagination offset.
+    </ParamField>
+    <ParamField path="ignoreDb" type="Boolean">
+      When `true`, skips the local cache. Default: `false`.
+    </ParamField>
+    <ParamField path="loadKeyData" type="LoadKeyData">
+      Request deduplication key. Default: `LoadKeyData()`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Updating Attachment Metadata
+
+<ResponseField name="updateAttachmentIdAndMessageId" type="suspend fun">
+  Synchronises the local database record's attachment ID and message ID fields after the server has confirmed a message send. Called internally by the send pipeline; you should not need to call this directly.
+
+  <Expandable title="Parameters">
+    <ParamField path="message" type="SceytMessage" required>
+      The confirmed `SceytMessage` whose attachment IDs have been assigned by the server.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="updateTransferDataByMsgTid" type="suspend fun">
+  Updates the upload or download transfer state for an attachment identified by its parent message's transaction ID. The UIKit calls this internally to persist progress, completion, or error states.
+
+  ```kotlin
+  interactor.updateTransferDataByMsgTid(
+      TransferData(
+          messageTid   = pendingMessage.tid,
+          progress     = 0.75f,
+          state        = TransferState.Uploading,
+          url          = null,
+          filePath     = localPath
+      )
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="data" type="TransferData" required>
+      A `TransferData` object containing the message tid, transfer progress (0.0–1.0), state, remote URL, and local file path.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="updateAttachmentFilePathAndMetadata" type="suspend fun">
+  Updates the local file path, file size, and metadata for an attachment in the database after a post-processing step (e.g. transcoding or resizing).
+
+  <Expandable title="Parameters">
+    <ParamField path="messageTid" type="Long" required>
+      The client-side transaction ID of the message whose attachment is being updated.
+    </ParamField>
+    <ParamField path="newPath" type="String" required>
+      The absolute path to the processed file.
+    </ParamField>
+    <ParamField path="fileSize" type="Long" required>
+      The size of the processed file in bytes.
+    </ParamField>
+    <ParamField path="metadata" type="String?">
+      Updated metadata JSON string for the attachment (e.g. image dimensions, duration), or `null` to leave unchanged.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## File Deduplication
+
+<ResponseField name="getFileChecksumData" type="suspend fun → FileChecksumData?">
+  Computes or retrieves the checksum data for a local file path. When `SceytChatUIKitConfig.preventDuplicateAttachmentUpload` is `true`, this is used to detect if the file has already been uploaded and reuse the existing URL.
+
+  ```kotlin
+  val checksum: FileChecksumData? = interactor.getFileChecksumData(localFilePath)
+  if (checksum?.url != null) {
+      // File already uploaded, reuse checksum.url
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="filePath" type="String?">
+      The absolute local file path to compute a checksum for. Returns `null` if the path is `null` or the file does not exist.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Link Previews
+
+<ResponseField name="getLinkPreviewData" type="suspend fun → SceytResponse&lt;LinkPreviewDetails&gt;">
+  Fetches Open Graph and other preview metadata for the given URL. The result is cached locally so subsequent calls for the same URL are served from the database.
+
+  ```kotlin
+  when (val result = interactor.getLinkPreviewData("https://sceyt.com")) {
+      is SceytResponse.Success -> showLinkPreview(result.data)
+      is SceytResponse.Error   -> hideLinkPreview()
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="link" type="String?">
+      The URL string to fetch preview data for. Returns an error response if `null` or malformed.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="upsertLinkPreviewData" type="suspend fun">
+  Inserts or updates a `LinkPreviewDetails` record in the local database. Use this to pre-populate the cache with server-provided or externally fetched preview data.
+
+  ```kotlin
+  interactor.upsertLinkPreviewData(
+      LinkPreviewDetails(
+          link        = "https://sceyt.com",
+          title       = "Sceyt Chat",
+          description = "In-app chat infrastructure",
+          imageUrl    = "https://sceyt.com/og-image.png"
+      )
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="linkDetails" type="LinkPreviewDetails" required>
+      The preview data to persist. The `link` field is used as the primary key.
+    </ParamField>
+  </Expandable>
+</ResponseField>

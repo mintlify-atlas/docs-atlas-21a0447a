@@ -1,0 +1,322 @@
+---
+title: "UserInteractor — User Profile API Reference"
+sidebarTitle: "UserInteractor"
+description: "Reference for UserInteractor: fetch user profiles, update the current user, search users, and manage block lists in Sceyt Chat Android UIKit."
+---
+
+`UserInteractor` is the interface responsible for all user-profile, presence, and block-list operations in the Sceyt Chat Android UIKit. It is accessible via `SceytChatUIKit.chatUIFacade.userInteractor`. All methods are `suspend` functions unless otherwise noted. Methods that communicate with the server return `SceytResponse<T>` — a sealed class with `Success` and `Error` variants. Methods that only touch the local database return the result type directly.
+
+**Package:** `com.sceyt.chatuikit.persistence.interactor`
+
+```kotlin
+val interactor: UserInteractor = SceytChatUIKit.chatUIFacade.userInteractor
+```
+
+---
+
+## Searching and Loading Users
+
+<ResponseField name="loadUsers" type="suspend fun → SceytResponse&lt;List&lt;SceytUser&gt;&gt;">
+  Executes the supplied `UserListQuery` against the server and returns the matching page of users.
+
+  ```kotlin
+  val query = UserListQuery.Builder()
+      .limit(30)
+      .filter(UserListQuery.UserListFilterType.Key)
+      .build()
+
+  when (val result = interactor.loadUsers(query)) {
+      is SceytResponse.Success -> showUsers(result.data)
+      is SceytResponse.Error   -> showError(result.exception)
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="query" type="UserListQuery" required>
+      A configured `com.sceyt.chat.models.user.UserListQuery` that specifies filter, sort order, and page size.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="loadMoreUsers" type="suspend fun → SceytResponse&lt;List&lt;SceytUser&gt;&gt;">
+  Loads the next page of results from the most recently executed `loadUsers` query. Must be called after `loadUsers` has returned a successful response.
+
+  ```kotlin
+  val nextPage = interactor.loadMoreUsers()
+  ```
+</ResponseField>
+
+---
+
+## Fetching Users
+
+<ResponseField name="getUserById" type="suspend fun → SceytResponse&lt;SceytUser&gt;">
+  Fetches a single user's public profile from the server by their unique user ID.
+
+  ```kotlin
+  when (val result = interactor.getUserById("user-abc-123")) {
+      is SceytResponse.Success -> displayProfile(result.data)
+      is SceytResponse.Error   -> handleError(result.exception)
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="id" type="String" required>
+      The unique string ID of the user to fetch.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getUsersByIds" type="suspend fun → SceytResponse&lt;List&lt;SceytUser&gt;&gt;">
+  Fetches the public profiles of multiple users in a single server request.
+
+  ```kotlin
+  val result = interactor.getUsersByIds(listOf("user-1", "user-2", "user-3"))
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="ids" type="List&lt;String&gt;" required>
+      List of unique user IDs to fetch.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getUserFromDbById" type="suspend fun → SceytUser?">
+  Returns a user from the local database by their ID, or `null` if they have not been cached.
+
+  ```kotlin
+  val cached: SceytUser? = interactor.getUserFromDbById("user-abc-123")
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="id" type="String" required>
+      The unique string ID of the user to look up in the local database.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getUsersFromDbByIds" type="suspend fun → List&lt;SceytUser&gt;">
+  Returns multiple users from the local database by their IDs. Missing users are silently omitted from the result list.
+
+  <Expandable title="Parameters">
+    <ParamField path="id" type="List&lt;String&gt;" required>
+      List of user IDs to look up locally.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="searchLocaleUserByMetadata" type="suspend fun → List&lt;SceytUser&gt;">
+  Performs a local (offline) search of cached users by matching a metadata value against the specified metadata keys. Useful for looking up users by custom attributes stored in user metadata.
+
+  ```kotlin
+  val matches = interactor.searchLocaleUserByMetadata(
+      metadataKeys  = listOf("department", "team"),
+      metadataValue = "engineering"
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="metadataKeys" type="List&lt;String&gt;" required>
+      The metadata field names to search within.
+    </ParamField>
+    <ParamField path="metadataValue" type="String" required>
+      The value to match against those metadata fields.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Current User
+
+<ResponseField name="getCurrentUser" type="suspend fun → SceytUser?">
+  Returns the currently authenticated user. When `refreshFromServer` is `true`, fetches the latest profile from the server before returning; otherwise, returns the cached value.
+
+  ```kotlin
+  val me: SceytUser? = interactor.getCurrentUser(refreshFromServer = true)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="refreshFromServer" type="Boolean">
+      When `true`, re-fetches the profile from the server to ensure the data is up-to-date. Default: `false`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getCurrentUserId" type="fun → String?">
+  Synchronously returns the current user's ID from the local authentication state, or `null` if no user is authenticated. This is a non-suspending function safe to call on the main thread.
+
+  ```kotlin
+  val userId: String? = interactor.getCurrentUserId()
+  ```
+</ResponseField>
+
+<ResponseField name="getCurrentUserAsFlow" type="fun → Flow&lt;SceytUser&gt;?">
+  Returns a `Flow` that emits the current user's profile from the local database and re-emits whenever the profile is updated. Returns `null` if there is no authenticated user.
+
+  ```kotlin
+  interactor.getCurrentUserAsFlow()
+      ?.onEach { user -> updateToolbarAvatar(user) }
+      ?.launchIn(lifecycleScope)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="currentUserId" type="String?">
+      The user ID to observe. Defaults to `getCurrentUserId()`.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Updating Profile
+
+<ResponseField name="uploadAvatar" type="suspend fun → SceytResponse&lt;String&gt;">
+  Uploads a local image file to the Sceyt CDN and returns the resulting avatar URL. Use the returned URL with `updateProfile` to apply the new avatar.
+
+  ```kotlin
+  val result = interactor.uploadAvatar(localFilePath)
+  if (result is SceytResponse.Success) {
+      interactor.updateProfile(
+          username  = currentUser.username,
+          firstName = currentUser.firstName,
+          lastName  = currentUser.lastName,
+          avatarUrl = result.data,
+          metadataMap = null
+      )
+  }
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="avatarUrl" type="String" required>
+      The absolute local file path (e.g. from the gallery or camera) of the image to upload.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="updateProfile" type="suspend fun → SceytResponse&lt;SceytUser&gt;">
+  Updates the current user's profile fields. Pass `null` for fields you do not want to change.
+
+  ```kotlin
+  interactor.updateProfile(
+      username    = "john_doe",
+      firstName   = "John",
+      lastName    = "Doe",
+      avatarUrl   = "https://cdn.example.com/avatars/john.jpg",
+      metadataMap = mapOf("department" to "engineering")
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="username" type="String" required>
+      The new username (handle) for the user.
+    </ParamField>
+    <ParamField path="firstName" type="String?">
+      The user's first name, or `null` to leave unchanged.
+    </ParamField>
+    <ParamField path="lastName" type="String?">
+      The user's last name, or `null` to leave unchanged.
+    </ParamField>
+    <ParamField path="avatarUrl" type="String?">
+      A CDN URL for the new avatar image, or `null` to leave unchanged. Obtain this from `uploadAvatar`.
+    </ParamField>
+    <ParamField path="metadataMap" type="Map&lt;String, String&gt;?">
+      Key/value metadata map to associate with the user, or `null` to leave unchanged.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Presence and Status
+
+<ResponseField name="setPresenceState" type="suspend fun → SceytResponse&lt;Boolean&gt;">
+  Sets the current user's presence state on the server (e.g. Online, Away, Offline).
+
+  ```kotlin
+  interactor.setPresenceState(PresenceState.Away)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="presenceState" type="PresenceState" required>
+      The `com.sceyt.chat.models.user.PresenceState` to set.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="updateStatus" type="suspend fun → SceytResponse&lt;Boolean&gt;">
+  Updates the current user's text status message shown alongside their presence indicator.
+
+  ```kotlin
+  interactor.updateStatus("In a meeting until 3pm")
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="status" type="String" required>
+      The status string to display (e.g. `"Available"`, `"Busy"`).
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## User Settings and Notifications
+
+<ResponseField name="getSettings" type="suspend fun → SceytResponse&lt;UserSettings&gt;">
+  Fetches the current user's server-side settings, such as global mute state and notification preferences.
+
+  ```kotlin
+  when (val result = interactor.getSettings()) {
+      is SceytResponse.Success -> applySettings(result.data)
+      is SceytResponse.Error   -> handleError(result.exception)
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="muteNotifications" type="suspend fun → SceytResponse&lt;Boolean&gt;">
+  Globally mutes all push notifications for the current user until the specified epoch timestamp in milliseconds.
+
+  ```kotlin
+  // Mute for 8 hours
+  interactor.muteNotifications(System.currentTimeMillis() + 8.hours.inWholeMilliseconds)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="muteUntil" type="Long" required>
+      Unix epoch millisecond timestamp until which notifications are muted. Pass `Long.MAX_VALUE` to mute indefinitely.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="unMuteNotifications" type="suspend fun → SceytResponse&lt;Boolean&gt;">
+  Re-enables global push notifications for the current user.
+
+  ```kotlin
+  interactor.unMuteNotifications()
+  ```
+</ResponseField>
+
+---
+
+## Block List
+
+<ResponseField name="blockUnBlockUser" type="suspend fun → SceytResponse&lt;List&lt;SceytUser&gt;&gt;">
+  Blocks or unblocks a user. When `block = true`, the specified user is added to the current user's block list and they can no longer send direct messages. When `block = false`, the block is removed.
+
+  ```kotlin
+  // Block a user
+  interactor.blockUnBlockUser(userId = "user-abc", block = true)
+
+  // Unblock a user
+  interactor.blockUnBlockUser(userId = "user-abc", block = false)
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="userId" type="String" required>
+      The ID of the user to block or unblock.
+    </ParamField>
+    <ParamField path="block" type="Boolean" required>
+      `true` to block the user, `false` to unblock.
+    </ParamField>
+  </Expandable>
+</ResponseField>

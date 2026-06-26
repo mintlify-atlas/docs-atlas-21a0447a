@@ -1,0 +1,219 @@
+---
+title: "StyleRegistry — Central Style Storage for UIKit Components"
+sidebarTitle: "StyleRegistry"
+description: "StyleRegistry is a thread-safe singleton that stores and retrieves SceytComponentStyle instances by string ID, surviving configuration changes."
+---
+
+`StyleRegistry` is a `ConcurrentHashMap`-backed singleton located at `com.sceyt.chatuikit.styles`. It is used internally by the UIKit to pass style objects across Activity creation cycles — storing a style by its string ID before launching a child Activity, and retrieving it inside that Activity's `onCreate` — without embedding `Parcelable` data in Intents or leaking `Context` references. Because the map is a `ConcurrentHashMap`, reads and writes are safe from any thread.
+
+<Note>
+  Most application developers will never call `StyleRegistry` directly. It is an internal transport mechanism. The primary entry point for style customization is [`StyleCustomizer`](/api-reference/style-customizer). Advanced use-cases such as pre-registering styles for custom Activities or Fragments are described at the bottom of this page.
+</Note>
+
+## `SceytComponentStyle` base type
+
+All styles stored in the registry must extend `SceytComponentStyle`:
+
+```kotlin
+abstract class SceytComponentStyle {
+    open val styleId: String = UUID.randomUUID().toString()
+}
+```
+
+Each instance is assigned a random UUID as its `styleId` by default. This ID is what you pass between components — store it in a `Bundle` argument or `Intent` extra, then look up the matching style object in the registry on the other side.
+
+## API reference
+
+<ResponseField name="get(id: String): SceytComponentStyle?" type="operator function">
+  Retrieves a style by its string ID. Returns `null` if no style with that ID has been registered.
+
+  ```kotlin
+  val style: SceytComponentStyle? = StyleRegistry["my-style-id"]
+  ```
+</ResponseField>
+
+<ResponseField name="set(id: String, style: SceytComponentStyle)" type="operator function">
+  Stores a style under the given string ID, replacing any previously registered style with the same ID.
+
+  ```kotlin
+  StyleRegistry["my-style-id"] = myStyle
+  ```
+</ResponseField>
+
+<ResponseField name="getTyped<T : SceytComponentStyle>(id: String?): T?" type="inline reified function">
+  Type-safe retrieval. Returns the style cast to `T`, or `null` if the ID is `null`, not found, or the stored value is a different type. The reified type parameter eliminates the need for an explicit `Class` argument.
+
+  ```kotlin
+  val style: MessageItemStyle? = StyleRegistry.getTyped<MessageItemStyle>("my-style-id")
+  ```
+</ResponseField>
+
+<ResponseField name="getOrDefault<T : SceytComponentStyle>(id: String?, defaultProvider: () -> T): T" type="inline reified function">
+  Returns the stored style cast to `T` if the ID is valid and the type matches. If the ID is `null`, not found, or the type does not match, the `defaultProvider` lambda is invoked and its return value is used instead. This is the pattern UIKit components use internally when reading their own style from the registry.
+
+  ```kotlin
+  val style: MessageItemStyle = StyleRegistry.getOrDefault(styleId) {
+      MessageItemStyle.Builder(context, attrs).build()
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="requireTyped<T : SceytComponentStyle>(id: String): T" type="inline reified function">
+  Type-safe retrieval that throws `IllegalArgumentException` if the style is not found or is the wrong type. Use this when you are certain the style must be present — it provides a clear error message that includes both the expected and actual type names.
+
+  ```kotlin
+  // Throws if the style is missing or not a MessageItemStyle
+  val style: MessageItemStyle = StyleRegistry.requireTyped("my-style-id")
+  ```
+
+  <Warning>
+    `requireTyped` throws `IllegalArgumentException` with a descriptive message if the ID does not exist or the stored type does not match `T`. Only use it when you control both the registration and retrieval sites.
+  </Warning>
+</ResponseField>
+
+<ResponseField name="register(style: SceytComponentStyle, id: String)" type="function">
+  Stores the style using the provided `id`. If `id` is omitted, `style.styleId` is used as the key. This is the preferred alternative to the operator `set` when you want to store a style under its own self-assigned ID.
+
+  ```kotlin
+  // Store under style.styleId (the default UUID)
+  StyleRegistry.register(myStyle)
+
+  // Store under a custom, stable ID
+  StyleRegistry.register(myStyle, id = "channel-info-media")
+  ```
+</ResponseField>
+
+<ResponseField name="unregister(id: String?): SceytComponentStyle?" type="function">
+  Removes the style registered under the given `id` and returns the removed instance, or `null` if the ID was `null` or not found. Call this in `onDestroy` of the owning component to prevent the registry from growing unbounded.
+
+  ```kotlin
+  override fun onDestroy() {
+      super.onDestroy()
+      StyleRegistry.unregister(styleId)
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="unregister(vararg ids: String)" type="function">
+  Removes multiple styles in a single call. The UIKit uses this overload in Activities that register several child-component styles at once (e.g. `ChannelInfoActivity` registers media, files, links, voice, and common-groups styles together).
+
+  ```kotlin
+  StyleRegistry.unregister(
+      style.mediaStyle.styleId,
+      style.filesStyle.styleId,
+      style.linkStyle.styleId
+  )
+  ```
+</ResponseField>
+
+<ResponseField name="clear()" type="function">
+  Removes **all** registered styles from the registry. Intended for testing teardown. Do not call this in production code while UIKit Activities are alive.
+
+  ```kotlin
+  StyleRegistry.clear()
+  ```
+</ResponseField>
+
+<ResponseField name="getDebugInfo(): String" type="function">
+  Returns a human-readable summary of how many styles are currently registered, broken down by type. Useful during development to confirm styles are being cleaned up correctly.
+
+  ```kotlin
+  Log.d("Styles", StyleRegistry.getDebugInfo())
+  // StyleRegistry: 3 total styles
+  //   MessageItemStyle: 1
+  //   ChannelInfoFilesStyle: 1
+  //   ChannelInfoMediaStyle: 1
+  ```
+</ResponseField>
+
+## How UIKit uses StyleRegistry internally
+
+The pattern used throughout the UIKit follows these steps:
+
+1. **Parent registers** — before launching a child Activity or Fragment, the parent registers one or more style objects and stores their `styleId` strings.
+2. **ID is passed via Intent/Bundle** — only the lightweight string ID travels across the process boundary, not the style object itself.
+3. **Child retrieves with fallback** — inside the child's `onCreate`, `getOrDefault` is called with the ID. If the style was not found (e.g., after a process death), the `defaultProvider` lambda builds a fresh default.
+4. **Child unregisters on destroy** — `onDestroy` of the child calls `unregister` to free the style from memory.
+
+```kotlin
+// ── Parent Activity ──────────────────────────────────────────────
+val style: CreatePollStyle = CreatePollStyle.Builder(context, null).build()
+StyleRegistry.register(style)                        // store by style.styleId
+val intent = Intent(context, CreatePollActivity::class.java).apply {
+    putExtra(STYLE_ID_KEY, style.styleId)            // pass the ID, not the object
+}
+startActivity(intent)
+
+// ── Child Activity ────────────────────────────────────────────────
+val styleId: String? = intent.getStringExtra(STYLE_ID_KEY)
+val style: CreatePollStyle = StyleRegistry.getOrDefault(styleId) {
+    CreatePollStyle.Builder(this, null).build()      // fallback if registry miss
+}
+
+override fun onDestroy() {
+    super.onDestroy()
+    StyleRegistry.unregister(style.styleId)          // clean up
+}
+```
+
+## Advanced: pre-registering a custom style by ID
+
+If you are building a custom Activity that embeds a UIKit Fragment, you can pre-register your own style instance and pass its ID via the Fragment's argument bundle:
+
+```kotlin
+import com.sceyt.chatuikit.styles.StyleRegistry
+import com.sceyt.chatuikit.styles.messages_list.item.MessageItemStyle
+
+// In your custom Activity before attaching the Fragment
+val customStyle: MessageItemStyle = MessageItemStyle.Builder(this, null)
+    .build()
+    .let { base ->
+        // Apply your overrides via copy
+        base.copy(
+            linkTextColor = getColor(R.color.brand_link_color)
+        )
+    }
+
+StyleRegistry.register(customStyle)   // stored under customStyle.styleId
+
+val fragment = MyMessagesFragment.newInstance(
+    styleId = customStyle.styleId
+)
+supportFragmentManager.beginTransaction()
+    .replace(R.id.container, fragment)
+    .commit()
+```
+
+Inside the Fragment, retrieve the style using `getOrDefault` so it degrades gracefully:
+
+```kotlin
+class MyMessagesFragment : Fragment() {
+
+    private lateinit var style: MessageItemStyle
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val styleId = arguments?.getString(ARG_STYLE_ID)
+        style = StyleRegistry.getOrDefault(styleId) {
+            MessageItemStyle.Builder(requireContext(), null).build()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        StyleRegistry.unregister(arguments?.getString(ARG_STYLE_ID))
+    }
+
+    companion object {
+        private const val ARG_STYLE_ID = "style_id"
+
+        fun newInstance(styleId: String) = MyMessagesFragment().apply {
+            arguments = Bundle().apply { putString(ARG_STYLE_ID, styleId) }
+        }
+    }
+}
+```
+
+<Tip>
+  Call `StyleRegistry.getDebugInfo()` during development to verify that styles are being registered and unregistered symmetrically. A steadily growing count across screen navigation cycles indicates a missing `unregister` call.
+</Tip>

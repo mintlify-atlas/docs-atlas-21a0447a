@@ -1,0 +1,198 @@
+---
+title: "Connecting and Disconnecting from Sceyt Chat"
+sidebarTitle: "Connection"
+description: "Manage the Sceyt Chat WebSocket connection lifecycle — connect, reconnect, disconnect, and monitor connection state in your Android app."
+---
+
+The Sceyt Chat SDK communicates over a persistent WebSocket connection. Your application is responsible for explicitly opening and closing that connection at the right moments in the activity or user-session lifecycle. This page walks through every connection-related API the UIKit exposes, explains when each one should be called, and shows how to observe real-time connection state changes and handle token expiry events gracefully.
+
+## Connecting
+
+Call `SceytChatUIKit.connect()` after a user successfully authenticates. Pass the short-lived JWT token you obtained from your backend. The SDK hands the token to the underlying `ChatClient`, which opens the WebSocket, authenticates the session, and begins syncing channel state.
+
+```kotlin
+// After receiving a token from your auth endpoint:
+SceytChatUIKit.connect(token = userToken)
+```
+
+<Note>
+  `connect()` is non-blocking. The WebSocket handshake happens asynchronously. Use `ConnectionEventManager.onChangedConnectStatusFlow` (described below) to react once the connection is actually established.
+</Note>
+
+## Reconnecting
+
+`SceytChatUIKit.reconnect()` tells the `ChatClient` to attempt a new connection using the last-known credentials without supplying a new token. Use this in scenarios where you know the token is still valid but the WebSocket dropped — for example, after the device recovers from a brief network interruption detected by a `ConnectivityManager` callback.
+
+```kotlin
+val connectivityCallback = object : ConnectivityManager.NetworkCallback() {
+    override fun onAvailable(network: Network) {
+        super.onAvailable(network)
+        if (!ConnectionEventManager.isConnected) {
+            SceytChatUIKit.reconnect()
+        }
+    }
+}
+```
+
+<Tip>
+  Prefer `reconnect()` over a fresh `connect(token)` call when you already have an active, non-expired token. It avoids unnecessary token-fetch round trips to your server.
+</Tip>
+
+## Disconnecting
+
+`SceytChatUIKit.disconnect()` closes the WebSocket cleanly without clearing any local database state or push registrations. The user's cached messages and channel list remain intact on device; they are simply no longer receiving live updates.
+
+```kotlin
+// Pause the connection when the app goes to background (optional):
+override fun onStop() {
+    super.onStop()
+    SceytChatUIKit.disconnect()
+}
+```
+
+<Note>
+  Calling `disconnect()` does **not** log the user out. Local data and push-notification registration are preserved. Call `connect()` again to resume the session.
+</Note>
+
+## Logging out
+
+`SceytChatUIKit.logOut()` performs a full session teardown: it cancels in-progress sync workers, clears the Room database, removes all channel and user caches, unregisters the device's Firebase push token from Sceyt's servers, and then disconnects the WebSocket. Use this when the user explicitly signs out of your application.
+
+```kotlin
+SceytChatUIKit.logOut { result ->
+    result.fold(
+        onSuccess = {
+            // Push token unregistered, safe to navigate to the login screen
+            navigateToLogin()
+        },
+        onFailure = { error ->
+            // Unregistering the push token failed, but the user is still
+            // locally logged out. Handle the error as appropriate.
+            Log.w("Logout", "Push unregister failed: ${error.message}")
+            navigateToLogin()
+        }
+    )
+}
+```
+
+<ParamField path="unregisterPushCallback" type="((Result<Boolean>) -> Unit)?" default="null">
+  An optional lambda invoked after the asynchronous Firebase token unregistration attempt completes. Receives a `Result<Boolean>` — `success(true)` when the server confirmed unregistration, or `failure(exception)` when it could not be completed. The user is fully logged out locally regardless of this result.
+</ParamField>
+
+<Warning>
+  `logOut()` deletes all locally cached data. The next time the same user connects, messages and channels will be re-synced from the server. On large accounts with many channels this may cause a noticeable initial load time.
+</Warning>
+
+## Monitoring connection state
+
+`ConnectionEventManager` is a singleton in `com.sceyt.chatuikit.data.managers.connection` that exposes real-time connection state as Kotlin Flows and convenience properties.
+
+### Quick state checks
+
+```kotlin
+// Synchronous snapshot — safe to call from any thread
+val state: ConnectionState = ConnectionEventManager.connectionState
+val isConnected: Boolean   = ConnectionEventManager.isConnected
+val isConnecting: Boolean  = ConnectionEventManager.isConnecting
+```
+
+### Collecting the state flow
+
+`onChangedConnectStatusFlow` is a `SharedFlow<ConnectionStateData>` that replays the most recent emission to new collectors, making it safe to subscribe at any point in your lifecycle:
+
+```kotlin
+lifecycleScope.launch {
+    ConnectionEventManager.onChangedConnectStatusFlow.collect { data ->
+        when (data.state) {
+            ConnectionState.Connected    -> showOnlineBadge()
+            ConnectionState.Connecting  -> showConnectingIndicator()
+            ConnectionState.Disconnected -> showOfflineBanner()
+            ConnectionState.Failed      -> {
+                showOfflineBanner()
+                Log.e("Chat", "Connection failed: ${data.exception?.message}")
+            }
+            else -> Unit
+        }
+    }
+}
+```
+
+### Awaiting connection in suspend functions
+
+`ConnectionEventManager` also provides suspending helpers for use in coroutines:
+
+```kotlin
+// Suspend until connected (no timeout)
+val connected: Boolean = ConnectionEventManager.awaitToConnectSceyt()
+
+// Suspend with a timeout (returns false if timed out)
+val connected: Boolean = ConnectionEventManager.awaitToConnectSceytWithTimeout(5_000L)
+
+// Suspend with a timeout and structured error reporting
+val result: Result<Boolean> = ConnectionEventManager.awaitToConnectSceytWithResult(5_000L)
+result.fold(
+    onSuccess = { /* connected */ },
+    onFailure = { error -> /* timed out or connection failed */ }
+)
+```
+
+## Handling token expiry
+
+Sceyt tokens are short-lived. The SDK notifies your application through two `SharedFlow` properties on `SceytChatUIFacade` — accessible as `SceytChatUIKit.chatUIFacade`:
+
+| Flow | Emits | Meaning |
+|---|---|---|
+| `onTokenWillExpire` | `Unit` | The current token will expire soon. Fetch a new one proactively. |
+| `onTokenExpired` | `Unit` | The token has already expired. The connection will drop unless a new token is supplied. |
+
+Collect both flows in a long-lived coroutine scope (e.g. your `Application` scope or a retained `ViewModel`):
+
+```kotlin
+// In your Application or a long-lived ViewModel:
+val facade = SceytChatUIKit.chatUIFacade
+
+applicationScope.launch {
+    facade.onTokenWillExpire.collect {
+        // Token is about to expire — fetch a new one in the background
+        val newToken = myAuthRepository.fetchToken()
+        facade.updateToken(newToken) { success, errorMessage ->
+            if (!success) {
+                Log.e("Token", "Proactive refresh failed: $errorMessage")
+            }
+        }
+    }
+}
+
+applicationScope.launch {
+    facade.onTokenExpired.collect {
+        // Token already expired — fetch and push a new one immediately
+        val newToken = myAuthRepository.fetchToken()
+        facade.updateToken(newToken) { success, errorMessage ->
+            if (!success) {
+                Log.e("Token", "Emergency refresh failed: $errorMessage")
+            }
+        }
+    }
+}
+```
+
+## Refreshing the token manually
+
+`SceytChatUIFacade.updateToken()` delivers a fresh token to the SDK without requiring a full reconnect cycle. It wraps `ChatClient.updateToken()` and notifies you of the outcome via a lambda:
+
+```kotlin
+SceytChatUIKit.chatUIFacade.updateToken(
+    token    = freshJwt,
+    listener = { success, errorMessage ->
+        if (success) {
+            Log.i("Token", "Token refreshed successfully")
+        } else {
+            Log.e("Token", "Token refresh failed: $errorMessage")
+        }
+    }
+)
+```
+
+<Tip>
+  For completely automatic token management, implement the `ChatTokenProvider` functional interface and assign it to `SceytChatUIKit.chatTokenProvider`. The SDK will call `provideToken()` whenever it needs a fresh token. See the [Authentication](/core-concepts/authentication) page for a complete example.
+</Tip>

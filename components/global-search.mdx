@@ -1,0 +1,193 @@
+---
+title: "Global Search Across Channels and Messages"
+sidebarTitle: "Global Search"
+description: "Integrate GlobalSearchActivity to let users search channels and messages across the entire app. Learn how to open it and configure search behavior."
+---
+
+Global Search lets users find channels, messages, media, files, voice messages, and links from a single unified search screen. The UIKit ships `GlobalSearchActivity` — a full-screen, tab-based search experience with a smooth shared-element transition from a search bar in the channel list, optional user-suggestion chips, and configurable debounce and auto-close behaviour. Opening it requires a single `Destination.GlobalSearch` call.
+
+## Opening GlobalSearchActivity
+
+Use `Destination.GlobalSearch` through the UIKit navigator:
+
+```kotlin
+import com.sceyt.chatuikit.SceytChatUIKit
+import com.sceyt.chatuikit.navigation.Destination
+import com.sceyt.chatuikit.navigation.navigate
+
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.GlobalSearch()
+)
+```
+
+### Shared-element transition from a search bar
+
+When you pass the search bar `View` as `sourceView`, `GlobalSearchActivity` uses a shared-element scene transition. The search input expands smoothly from the source view into the full-screen search bar:
+
+```kotlin
+// e.g., called from a search icon or search bar click listener
+SceytChatUIKit.navigator.navigate(
+    context,                                // must be an Activity context
+    Destination.GlobalSearch(sourceView = searchBarView)
+)
+```
+
+`ChannelListFragment` uses this pattern automatically when the user taps the search bar at the top of the channel list. The `View` passed as `sourceView` must have the shared transition name `GlobalSearchActivity.SHARED_TRANSITION_NAME` set in XML or code for the animation to work:
+
+```xml
+<View
+    android:id="@+id/searchView"
+    android:transitionName="@string/sceyt_global_search_bar"
+    ... />
+```
+
+```kotlin
+// or programmatically:
+searchBarView.transitionName = GlobalSearchActivity.SHARED_TRANSITION_NAME
+```
+
+<Note>
+  The shared-element transition is only activated when both a non-null `sourceView` and an `Activity` context are provided. If either is absent, the UIKit falls back to its standard slide-in-right animation.
+</Note>
+
+---
+
+## Search tabs
+
+`GlobalSearchActivity` displays results in a horizontal tab bar backed by a `ViewPager2`. The default tabs are:
+
+| Tab | Content |
+|-----|---------|
+| **Chats** | Messages matching the query inside joined channels |
+| **Channels** | Public and joined channels matching the query |
+| **Media** | Photo and video attachments |
+| **Files** | File attachments |
+| **Voice** | Voice message attachments |
+| **Links** | Shared links |
+
+Each tab is a self-contained Fragment (`ChatsSearchFragment`, `ChannelsSearchFragment`, `MediaSearchFragment`, `FilesSearchFragment`, `VoiceSearchFragment`, `LinksSearchFragment`). You can change which tabs appear by subclassing `GlobalSearchActivity` and overriding `provideTabs()`:
+
+```kotlin
+import com.sceyt.chatuikit.presentation.components.global_search.GlobalSearchActivity
+import com.sceyt.chatuikit.presentation.components.global_search.GlobalSearchTab
+
+class MyGlobalSearchActivity : GlobalSearchActivity() {
+
+    override fun provideTabs(): List<GlobalSearchTab> {
+        // Show only Chats and Channels tabs
+        return listOf(GlobalSearchTab.Chats, GlobalSearchTab.Channels)
+    }
+}
+```
+
+---
+
+## GlobalSearchConfig — configuring search behaviour
+
+Search behaviour is controlled by `GlobalSearchConfig` inside `SceytChatUIKitConfig`. Configure it once during SDK initialisation, typically in `Application.onCreate()`:
+
+```kotlin
+import com.sceyt.chatuikit.SceytChatUIKit
+import com.sceyt.chatuikit.config.GlobalSearchConfig
+import com.sceyt.chatuikit.config.GlobalSearchCloseBehavior
+
+SceytChatUIKit.config.globalSearchConfig = GlobalSearchConfig().apply {
+    // Maximum number of user suggestion chips to show (default: 8)
+    userSuggestionsLimit = 8
+
+    // Debounce delay in ms before a search query is fired (default: 300)
+    searchInputDebounceMs = 300
+
+    // When to auto-close the search screen (default: OnMessageSent)
+    closeBehavior = GlobalSearchCloseBehavior.OnMessageSent
+}
+```
+
+### `GlobalSearchCloseBehavior` options
+
+| Value | Behaviour |
+|-------|-----------|
+| `Never` | The search screen stays open until the user presses Back |
+| `OnChannelOpen` | Closes when the user taps a channel, message, or media result |
+| `OnMessageSent` | Closes when an outgoing message is detected on any channel |
+
+---
+
+## SearchChannelParams — configuring channel search
+
+The `SearchChannelParams` data class controls how channel-name queries are matched. Set it via the `channelListConfig` or pass it directly to your custom search logic:
+
+```kotlin
+import com.sceyt.chatuikit.config.SearchChannelParams
+import com.sceyt.chat.models.SearchQueryOperator
+import com.sceyt.chat.models.channel.ChannelListQuery.ChannelListFilterKey
+
+// The built-in default:
+val defaultParams = SearchChannelParams.default
+// SearchQueryOperator.SearchQueryOperatorContains
+// ChannelListFilterKey.ListQueryChannelFilterKeySubject
+
+// Custom example — prefix match on subject:
+val customParams = SearchChannelParams(
+    queryType = SearchQueryOperator.SearchQueryOperatorBeginsWith,
+    filterKey   = ChannelListFilterKey.ListQueryChannelFilterKeySubject
+)
+```
+
+---
+
+## User suggestions
+
+While the search input is empty, `GlobalSearchActivity` displays horizontal user-suggestion chips sourced from `GlobalSearchUserSuggestionsProvider`. The built-in `DefaultUserSuggestionsProvider` returns the most recently active contacts. Replace it by overriding `getUserSuggestionsProvider()` in a subclass:
+
+```kotlin
+class MyGlobalSearchActivity : GlobalSearchActivity() {
+
+    override fun getUserSuggestionsProvider(): GlobalSearchUserSuggestionsProvider {
+        return MyCustomSuggestionsProvider()
+    }
+}
+```
+
+---
+
+## Subclassing GlobalSearchActivity
+
+Override any `open` method to customise individual parts of the screen while keeping everything else:
+
+```kotlin
+class MyGlobalSearchActivity : GlobalSearchActivity() {
+
+    // Use a custom style
+    override fun buildStyle(): GlobalSearchStyle {
+        return GlobalSearchStyle.Builder(this).build().let { style ->
+            // modify style properties here
+            style
+        }
+    }
+
+    // React to channel taps
+    override fun onChannelClicked(channel: SceytChannel) {
+        // default navigates to Destination.Channel(channel)
+        super.onChannelClicked(channel)
+    }
+
+    // React to message taps
+    override fun onMessageClicked(messageId: Long, channel: SceytChannel) {
+        // default navigates to Destination.Channel(channel, messageId)
+        super.onMessageClicked(messageId, channel)
+    }
+}
+```
+
+Register the subclass with the navigator so the UIKit router uses it everywhere:
+
+```kotlin
+SceytChatUIKit.navigator.resolve = { destination ->
+    when (destination) {
+        is Destination.GlobalSearch -> MyGlobalSearchDestination(destination.sourceView)
+        else -> destination
+    }
+}
+```

@@ -1,0 +1,109 @@
+---
+title: "Customize Push Notification Appearance in Sceyt Chat"
+sidebarTitle: "Notification Style"
+description: "Override notification title, body, icon, and channel settings using SceytChatUIKit.notifications and the formatter system for push content."
+---
+
+The Sceyt Chat Android UIKit ships sensible defaults for push notification appearance, but every aspect of how notifications look and behave is open for customization. Title and body text are controlled through the formatter system on `SceytChatUIKit.formatters`, while channel configuration, icon selection, and display logic are managed through `SceytChatUIKit.notifications`.
+
+## The `SceytNotifications` Object
+
+`SceytChatUIKit.notifications` is a `SceytNotifications` instance that acts as a central registry for notification components. It exposes two top-level properties:
+
+| Property | Type | Purpose |
+|---|---|---|
+| `pushNotification` | `PushNotification` | Handles incoming chat push notifications |
+| `fileTransferServiceNotification` | `FileTransferServiceNotification` | Manages the foreground service notification shown during attachment uploads |
+
+## Customizing Notification Text
+
+Notification titles and bodies are produced by `Formatter<PushData>` instances registered on `SceytChatUIKit.formatters`. Override either formatter by assigning a new `Formatter<PushData>` implementation:
+
+- `SceytChatUIKit.formatters.notificationTitleFormatter` — returns the notification title. By default it uses the channel subject for groups, or the sender's formatted name for direct messages.
+- `SceytChatUIKit.formatters.notificationBodyFormatter` — returns the notification body. By default it includes attachment emoji icons and formats mention spans.
+
+### Example: Custom notification title
+
+```kotlin
+import android.content.Context
+import com.sceyt.chatuikit.SceytChatUIKit
+import com.sceyt.chatuikit.formatters.Formatter
+import com.sceyt.chatuikit.push.PushData
+
+SceytChatUIKit.formatters.notificationTitleFormatter = Formatter { context: Context, from: PushData ->
+    // Show "[Group] ChannelName" for group channels, sender name for DMs
+    if (from.channel.isGroup) {
+        "[Group] ${from.channel.subject.orEmpty()}"
+    } else {
+        from.user.firstName.orEmpty()
+    }
+}
+```
+
+<Note>
+Both formatters receive a `PushData` object, which carries the `channel`, `user`, `message`, `reaction`, and `type` (either `NotificationType.ChannelMessage` or `NotificationType.MessageReaction`).
+</Note>
+
+## Configuring Push Notifications
+
+`SceytChatUIKit.notifications.pushNotification` is a `PushNotification` instance with three replaceable components:
+
+<Accordion title="notificationHandler — PushNotificationHandler">
+Controls when and how notifications are displayed, cancelled, and what happens when the user taps notification actions such as **Reply** or **Mark as Read**. Extend `DefaultPushNotificationHandler` to override only the callbacks you need.
+
+```kotlin
+SceytChatUIKit.notifications.pushNotification.notificationHandler =
+    MyCustomPushNotificationHandler(context)
+```
+</Accordion>
+
+<Accordion title="notificationChannelProvider — NotificationChannelProvider">
+Responsible for creating the `NotificationChannel` on Android O (API 26) and above. Override to set a custom channel name, description, importance level, sound, or vibration pattern.
+
+```kotlin
+SceytChatUIKit.notifications.pushNotification.notificationChannelProvider =
+    MyCustomChannelProvider(context)
+```
+</Accordion>
+
+<Accordion title="notificationBuilder — PushNotificationBuilder">
+A `NotificationBuilder<PushData>` that constructs the final `Notification` object. Override individual methods to change the small icon, large avatar icon, pending intent, or apply a custom `NotificationCompat.Style`.
+
+```kotlin
+SceytChatUIKit.notifications.pushNotification.notificationBuilder =
+    MyCustomPushNotificationBuilder(context)
+```
+</Accordion>
+
+### Replacing the Small Icon
+
+The quickest way to change the notification icon is to subclass `DefaultPushNotificationBuilder` and override `provideNotificationSmallIcon`:
+
+```kotlin
+import android.content.Context
+import com.sceyt.chatuikit.notifications.push.defaults.DefaultPushNotificationBuilder
+import com.sceyt.chatuikit.push.PushData
+
+class MyPushNotificationBuilder(context: Context) : DefaultPushNotificationBuilder(context) {
+    override fun provideNotificationSmallIcon(data: PushData): Int {
+        return R.drawable.ic_my_notification_icon
+    }
+}
+
+// Apply it:
+SceytChatUIKit.notifications.pushNotification.notificationBuilder =
+    MyPushNotificationBuilder(applicationContext)
+```
+
+## File Transfer Service Notification
+
+When the user sends an attachment, the UIKit runs a foreground service to ensure reliable upload. A persistent notification is shown while the transfer is in progress. You can customise it through `SceytChatUIKit.notifications.fileTransferServiceNotification`, which exposes the same three-component pattern (`notificationHandler`, `notificationChannelProvider`, `notificationBuilder`) as the push notification configuration.
+
+```kotlin
+SceytChatUIKit.notifications.fileTransferServiceNotification.notificationBuilder =
+    MyFileTransferNotificationBuilder(applicationContext)
+```
+
+<Tip>
+All customization should be applied before calling `SceytChatUIKit.initialize()`, or at the latest before the first user connection, to ensure components are in place when the first notification arrives.
+</Tip>

@@ -1,0 +1,114 @@
+---
+title: "Install Sceyt Chat Android UIKit in Your Project"
+sidebarTitle: "Installation"
+description: "Add the Sceyt Chat Android UIKit dependency to your Android project using Maven Central or JitPack, and configure required repositories."
+---
+
+Adding Sceyt Chat Android UIKit to an existing project takes only a few minutes. The library is published to **Maven Central** (with JitPack as a secondary source for transitive dependencies), so no additional repository credentials are required.
+
+<Steps>
+
+<Step title="Configure repositories">
+
+Open your **project-level** build file and ensure both Maven Central and JitPack are declared in the repository block. The UIKit itself is resolved from Maven Central; JitPack is required for a small number of transitive dependencies.
+
+<CodeGroup>
+
+```kotlin build.gradle.kts (Kotlin DSL)
+// settings.gradle.kts  — preferred location in modern projects
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven(url = "https://jitpack.io")
+    }
+}
+```
+
+```groovy build.gradle (Groovy DSL)
+// settings.gradle  — preferred location in modern projects
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+}
+```
+
+</CodeGroup>
+
+<Note>
+If your project still uses the legacy `allprojects { repositories { … } }` block in the root `build.gradle`, add the same two entries there instead of in `settings.gradle`.
+</Note>
+
+</Step>
+
+<Step title="Add the UIKit dependency">
+
+Open your **app-module** build file and add the UIKit artifact to the `dependencies` block.
+
+<CodeGroup>
+
+```kotlin build.gradle.kts (Kotlin DSL)
+dependencies {
+    implementation("com.sceyt:sceyt-chat-android-uikit:2.1.5")
+}
+```
+
+```groovy build.gradle (Groovy DSL)
+dependencies {
+    implementation 'com.sceyt:sceyt-chat-android-uikit:2.1.5'
+}
+```
+
+</CodeGroup>
+
+The UIKit is published with `api` transitive dependencies, so libraries like `appcompat`, `material`, `fragment-ktx`, `room`, `koin-android`, `media3-exoplayer`, and `firebase-messaging` are automatically available to your app without additional declarations.
+
+</Step>
+
+<Step title="Register your Application class">
+
+The UIKit must be initialized inside a custom `Application` subclass. If you do not already have one, create it and register it in `AndroidManifest.xml`:
+
+```xml AndroidManifest.xml
+<application
+    android:name=".MyApplication"
+    android:label="@string/app_name"
+    android:icon="@mipmap/ic_launcher"
+    ... >
+
+    <!-- activities, services, etc. -->
+
+</application>
+```
+
+<Warning>
+Omitting `android:name` means `SceytChatUIKit.initialize(…)` is never called, and the library will throw at runtime the first time any component is accessed.
+</Warning>
+
+</Step>
+
+</Steps>
+
+## Minimum SDK
+
+The UIKit requires **Android API 24** (Android 7.0 "Nougat") or later. Make sure your app module declares at least this value:
+
+```kotlin build.gradle.kts
+android {
+    defaultConfig {
+        minSdk = 24
+    }
+}
+```
+
+## ProGuard / R8
+
+If you enable code shrinking, add the following keep rule to your `proguard-rules.pro` file to prevent UIKit classes from being obfuscated:
+
+```
+# Keep all necessary classes in 'com.sceyt.chatuikit' package and its subpackages
+-keep class com.sceyt.chatuikit.** { *; }
+```
+
+For a full discussion of shrinking options, see the **ProGuard** page in the Advanced section.

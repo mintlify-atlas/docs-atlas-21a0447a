@@ -1,0 +1,104 @@
+---
+title: "Set Up Firebase Push Notifications for Sceyt Chat"
+sidebarTitle: "Push Notifications"
+description: "Integrate Firebase Cloud Messaging with the Sceyt Chat Android UIKit to deliver push notifications when the app is in the background."
+---
+
+The Sceyt Chat Android UIKit integrates with Firebase Cloud Messaging (FCM) through a thin delegate layer, `FirebaseMessagingDelegate`. You forward token registration and incoming messages to the delegate, and the UIKit takes care of parsing push payloads, triggering the notification display pipeline, and registering or deregistering the device with the Sceyt platform.
+
+## Prerequisites
+
+Before wiring up the delegate, make sure:
+
+- A Firebase project exists and your app is registered inside it.
+- `google-services.json` is placed in your app module root (`app/google-services.json`).
+- The `com.google.gms.google-services` plugin is applied in your build scripts.
+- `FirebaseMessagingService` (or a subclass) is declared in `AndroidManifest.xml`.
+
+## Registering a Token
+
+Whenever FCM delivers a new registration token call `FirebaseMessagingDelegate.registerFirebaseToken(token)` from inside your service's `onNewToken` callback. The delegate wraps the token in a `PushDevice` with `PushServiceType.Fcm` and forwards it to the Sceyt platform so the server can target the device.
+
+```kotlin
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.sceyt.chatuikit.push.delegates.FirebaseMessagingDelegate
+
+class MyFirebaseMessagingService : FirebaseMessagingService() {
+    override fun onNewToken(token: String) {
+        FirebaseMessagingDelegate.registerFirebaseToken(token)
+    }
+}
+```
+
+## Handling Incoming Messages
+
+When FCM delivers a data message, call `FirebaseMessagingDelegate.handleRemoteMessage(remoteMessage)`. If the message belongs to Sceyt Chat, the delegate parses it and hands the payload to the UIKit notification pipeline, then returns the parsed `PushData`. For non-Sceyt messages it returns `null` so you can handle them yourself.
+
+Use `FirebaseMessagingDelegate.isChatPushNotification(remoteMessage)` to check ownership without fully processing the message — useful when you need to branch logic early.
+
+```kotlin
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.google.firebase.messaging.RemoteMessage
+import com.sceyt.chatuikit.push.delegates.FirebaseMessagingDelegate
+
+class MyFirebaseMessagingService : FirebaseMessagingService() {
+
+    override fun onNewToken(token: String) {
+        FirebaseMessagingDelegate.registerFirebaseToken(token)
+    }
+
+    override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        if (FirebaseMessagingDelegate.isChatPushNotification(remoteMessage)) {
+            // Let the UIKit handle this push.
+            FirebaseMessagingDelegate.handleRemoteMessage(remoteMessage)
+        } else {
+            // Your own push handling logic here.
+        }
+    }
+}
+```
+
+## Unregistering on Logout
+
+When the user logs out, call `FirebaseMessagingDelegate.unregisterFirebaseToken()` to deregister the device from the Sceyt platform so the user no longer receives push notifications. You can also call the higher-level `SceytChatUIKit.logOut()`, which performs the unregistration internally before clearing user state.
+
+<Steps>
+  <Step title="Unregister via the delegate directly">
+    ```kotlin
+    FirebaseMessagingDelegate.unregisterFirebaseToken { result ->
+        result.onSuccess { println("Token unregistered") }
+        result.onFailure { e -> println("Failed: ${e.message}") }
+    }
+    ```
+  </Step>
+  <Step title="Or call SceytChatUIKit.logOut()">
+    ```kotlin
+    SceytChatUIKit.logOut { result ->
+        result.onSuccess { println("Logged out and token unregistered") }
+    }
+    ```
+  </Step>
+</Steps>
+
+<Note>
+`unregisterFirebaseToken` accepts an optional `(Result<Boolean>) -> Unit` callback. When using `SceytChatUIKit.logOut(unregisterPushCallback)`, the same callback is wired through.
+</Note>
+
+## Push Notification Configuration
+
+Fine-grained push behaviour — such as enabling/disabling push globally, suppressing notifications while the app is in the foreground, or filtering which pushes produce a visible notification — is controlled through `SceytChatUIKit.config.notificationConfig`, which exposes a `PushNotificationConfig` object.
+
+```kotlin
+SceytChatUIKit.config.notificationConfig = PushNotificationConfig(
+    isPushEnabled = true,
+    suppressWhenAppIsInForeground = true,
+    shouldDisplayNotification = { pushData ->
+        // Return false to silently drop a specific push.
+        true
+    }
+)
+```
+
+<Tip>
+Set `suppressWhenAppIsInForeground = false` if you want heads-up banners even when the user is actively using the app.
+</Tip>

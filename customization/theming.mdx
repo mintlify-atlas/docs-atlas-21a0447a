@@ -1,0 +1,202 @@
+---
+title: "Theme Colors and Global Appearance in Sceyt Chat UIKit"
+sidebarTitle: "Theming"
+description: "Customize the global accent color, avatar background colors, light/dark mode, and default reactions across the entire Sceyt Chat Android UIKit."
+---
+
+The Sceyt Chat Android UIKit ships with a cohesive color system that flows through every component. Rather than hunting down individual style attributes, you control the global palette from a single `SceytChatUIKitTheme` object, and every screen — channel list, message thread, channel info, and more — picks up those colors automatically. This page covers how to adjust the accent color, define avatar background colors, change the default emoji reactions, and understand how light/dark mode works.
+
+## `SceytChatUIKit.theme`
+
+The entry point for all color customization is `SceytChatUIKit.theme`, which holds a `SceytChatUIKitTheme` data class. The theme exposes a single `colors` property of type `Colors`.
+
+```kotlin
+data class SceytChatUIKitTheme(
+    var colors: Colors = Colors()
+)
+```
+
+`Colors` is itself a data class with `@ColorRes` integer fields for every semantic slot used across the UIKit:
+
+| Property | Default color resource | Purpose |
+|---|---|---|
+| `primaryColor` | `R.color.sceyt_color_primary` | App bars and navigation backgrounds |
+| `statusBarColor` | `R.color.sceyt_color_status_bar` | System status bar tint |
+| `accentColor` | `R.color.sceyt_color_accent` | Primary brand color — buttons, highlights |
+| `accentColor2` – `accentColor5` | `R.color.sceyt_color_accent_2` … `_5` | Secondary accent palette |
+| `onPrimaryColor` | `R.color.sceyt_color_on_primary` | Text/icons displayed on the primary color |
+| `backgroundColor` | `R.color.sceyt_color_background` | Main screen backgrounds |
+| `backgroundColorSecondary` | `R.color.sceyt_color_background_secondary` | Secondary backgrounds and dividers |
+| `backgroundColorSections` | `R.color.sceyt_color_background_sections` | Section / card backgrounds |
+| `surface1Color` – `surface3Color` | `R.color.sceyt_color_surface_1` … `_3` | Elevated surfaces (bottom sheets, popovers) |
+| `overlayBackgroundColor` | `R.color.sceyt_color_overlay_background` | Scrim overlays |
+| `overlayBackground2Color` | `R.color.sceyt_color_overlay_background_2` | Secondary scrim overlays |
+| `borderColor` | `R.color.sceyt_color_border` | Separators and borders |
+| `iconSecondaryColor` | `R.color.sceyt_color_icon_secondary` | Secondary icon tint |
+| `iconInactiveColor` | `R.color.sceyt_color_icon_inactive` | Disabled icon tint |
+| `textPrimaryColor` | `R.color.sceyt_color_text_primary` | Primary body text |
+| `textSecondaryColor` | `R.color.sceyt_color_text_secondary` | Secondary / caption text |
+| `textFootnoteColor` | `R.color.sceyt_color_text_footnote` | Footnote / hint text |
+| `warningColor` | `R.color.sceyt_color_warning` | Warning states |
+| `successColor` | `R.color.sceyt_color_green` | Success states |
+| `attentionColor` | `R.color.sceyt_color_attention` | Error and attention states |
+
+---
+
+## Setting the Accent Color
+
+Because `Colors` is a data class, use `copy()` to override only the fields you need. Apply the change inside your `Application.onCreate()`, **before** any UI is shown.
+
+```kotlin
+import com.sceyt.chatuikit.SceytChatUIKit
+
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        // Initialize the UIKit first …
+        SceytChatUIKit.initialize(
+            context  = this,
+            apiUrl   = "https://us-ohio-api.sceyt.com",
+            appId    = "your-app-id",
+            clientId = UUID.randomUUID().toString(),
+            enableDatabase = true
+        )
+
+        // Then override the accent color:
+        SceytChatUIKit.theme.colors = SceytChatUIKit.theme.colors.copy(
+            accentColor = R.color.accentColor
+        )
+    }
+}
+```
+
+You can update multiple slots in a single `copy()` call:
+
+```kotlin
+SceytChatUIKit.theme.colors = SceytChatUIKit.theme.colors.copy(
+    accentColor           = R.color.brand_blue,
+    accentColor2          = R.color.brand_blue_light,
+    backgroundColor       = R.color.screen_background,
+    textPrimaryColor      = R.color.text_primary
+)
+```
+
+<Note>
+All color fields accept `@ColorRes` integer identifiers — **not** `@ColorInt` ARGB values. Resolve color resources with `ContextCompat.getColor()` only when a `@ColorInt` is explicitly required by a downstream API.
+</Note>
+
+---
+
+## Avatar Background Colors
+
+When a user or channel has no profile photo, the UIKit renders an initial-based avatar. The background color for that avatar is chosen from a rotating list. Customize the list by replacing `SceytChatUIKit.config.defaultAvatarBackgroundColors` with any `AvatarBackgroundColors` implementation.
+
+`AvatarBackgroundColors` is a functional interface:
+
+```kotlin
+fun interface AvatarBackgroundColors {
+    fun getColors(context: Context): List<Int>
+}
+```
+
+Provide your own colors:
+
+```kotlin
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.toColorInt
+import com.sceyt.chatuikit.config.AvatarBackgroundColors
+
+SceytChatUIKit.config.defaultAvatarBackgroundColors = AvatarBackgroundColors { context ->
+    listOf(
+        "#FFC107".toColorInt(),
+        "#FF5722".toColorInt(),
+        ContextCompat.getColor(context, R.color.pink),
+        ContextCompat.getColor(context, R.color.red),
+    )
+}
+```
+
+The default implementation cycles through `accentColor` through `accentColor5` from the active theme, so updating those theme slots is often sufficient without a custom provider.
+
+---
+
+## Default Reactions
+
+The emoji picker that appears on a long-press shows a row of quick-access reactions. Override the list via `SceytChatUIKit.config.defaultReactions`:
+
+```kotlin
+SceytChatUIKit.config.defaultReactions = listOf("😎", "👍", "❤️", "😂", "😮", "😢")
+```
+
+<Tip>
+The list can contain any Unicode emoji string. Keep it to six items to match the default row layout and avoid truncation.
+</Tip>
+
+---
+
+## Light and Dark Mode
+
+The UIKit automatically adapts to the system day/night mode because all built-in color resources are defined as `<selector>` resources with both `night` and default variants. No extra configuration is required — when the system switches to dark mode, the UIKit re-reads its color resources and updates accordingly.
+
+### Controlling the Mode Programmatically
+
+You can force a specific appearance by setting the `AppCompatDelegate` night mode flag before the UIKit renders any view:
+
+```kotlin
+import androidx.appcompat.app.AppCompatDelegate
+
+// Force dark mode
+AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+
+// Force light mode
+AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+
+// Follow the system setting (default)
+AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+```
+
+<Note>
+Call `AppCompatDelegate.setDefaultNightMode()` before `super.onCreate()` in your `Application` class or before the first activity is created to avoid a recreation cycle.
+</Note>
+
+If you supply custom `@ColorRes` values to `SceytChatUIKit.theme.colors`, make sure those resources also include `night` qualifier variants so that your overrides respond to dark mode correctly.
+
+---
+
+## Full Initialization Example
+
+```kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        SceytChatUIKit.initialize(
+            context        = this,
+            apiUrl         = "https://us-ohio-api.sceyt.com",
+            appId          = "your-app-id",
+            clientId       = UUID.randomUUID().toString(),
+            enableDatabase = true
+        )
+
+        // Brand colors
+        SceytChatUIKit.theme.colors = SceytChatUIKit.theme.colors.copy(
+            accentColor     = R.color.brand_primary,
+            accentColor2    = R.color.brand_secondary,
+            backgroundColor = R.color.screen_bg
+        )
+
+        // Avatar palette
+        SceytChatUIKit.config.defaultAvatarBackgroundColors = AvatarBackgroundColors { context ->
+            listOf(
+                ContextCompat.getColor(context, R.color.avatar_teal),
+                ContextCompat.getColor(context, R.color.avatar_indigo),
+                ContextCompat.getColor(context, R.color.avatar_rose),
+            )
+        }
+
+        // Quick reactions
+        SceytChatUIKit.config.defaultReactions = listOf("❤️", "👍", "😂", "😮", "🙏", "🔥")
+    }
+}
+```

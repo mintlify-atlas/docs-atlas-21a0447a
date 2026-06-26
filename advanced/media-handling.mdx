@@ -1,0 +1,152 @@
+---
+title: "Media Handling and Resizing in Sceyt Chat Android UIKit"
+sidebarTitle: "Media Handling"
+description: "Configure image and video resizing quality, voice recorder settings, and file transfer behavior in the Sceyt Chat Android UIKit."
+---
+
+The Sceyt Chat Android UIKit compresses images and videos before upload, records voice messages through a built-in recorder, and manages file transfers via a dedicated foreground service. All of these subsystems are configurable through properties on `SceytChatUIKit.config`, letting you balance quality, upload speed, and storage usage for your specific use case.
+
+## Image Resizing
+
+Images selected from the gallery or captured with the camera are resized before being attached to a message. Two separate resize targets let you apply different quality settings to avatars versus message attachments.
+
+### Message Attachments
+
+```kotlin
+SceytChatUIKit.config.imageAttachmentResizeConfig = ResizeConfig.Medium // default
+```
+
+### Channel and User Avatars
+
+```kotlin
+SceytChatUIKit.config.avatarResizeConfig = ResizeConfig.Low // default
+```
+
+### `ResizeConfig` Values
+
+`ResizeConfig` is an open class with three built-in presets. Each preset controls the maximum dimension threshold (in pixels) and JPEG compression quality:
+
+| Preset | `dimensionThreshold` | `compressionQuality` | Recommended for |
+|---|---|---|---|
+| `ResizeConfig.Low` | 720 px | 80 % | Avatars, thumbnails |
+| `ResizeConfig.Medium` | 1080 px | 80 % | Message photos (default) |
+| `ResizeConfig.High` | 1600 px | 90 % | High-fidelity image sharing |
+
+You can also provide a fully custom configuration by subclassing `ResizeConfig`:
+
+```kotlin
+SceytChatUIKit.config.imageAttachmentResizeConfig = object : ResizeConfig(
+    dimensionThreshold = 1280,
+    compressionQuality = 85
+) {}
+```
+
+## Video Resizing
+
+Video attachments are transcoded through an internal `CustomVideoCompressor` pipeline. Configure the target quality with `VideoResizeConfig`:
+
+```kotlin
+SceytChatUIKit.config.videoAttachmentResizeConfig = VideoResizeConfig.Medium // default
+```
+
+### `VideoResizeConfig` Values
+
+| Preset | `dimensionThreshold` | `compressionQuality` | `frameRate` | `bitrate` |
+|---|---|---|---|---|
+| `VideoResizeConfig.Low` | 800 px | 80 % | 30 fps | 500 000 bps |
+| `VideoResizeConfig.Medium` | 1200 px | 80 % | 30 fps | 1 000 000 bps |
+| `VideoResizeConfig.High` | 1600 px | 80 % | 30 fps | 2 000 000 bps |
+
+Provide a custom preset by subclassing `VideoResizeConfig`:
+
+```kotlin
+SceytChatUIKit.config.videoAttachmentResizeConfig = object : VideoResizeConfig(
+    dimensionThreshold = 1080,
+    compressionQuality = 80,
+    frameRate = 30,
+    bitrate = 1_500_000
+) {}
+```
+
+## Voice Recorder
+
+The built-in voice recorder is configured via `SceytChatUIKit.config.voiceRecorderConfig`, which accepts a `VoiceRecorderConfig` data class:
+
+```kotlin
+data class VoiceRecorderConfig(
+    val maxDuration: VoiceRecorderDuration = VoiceRecorderDuration.MaxDuration(5 * 60 * 1000L),
+    val bitrate: Int = 32_000,
+    val samplingRate: Int = 16_000,
+)
+```
+
+| Property | Default | Description |
+|---|---|---|
+| `maxDuration` | 5 minutes | Either `VoiceRecorderDuration.Unlimited` or `VoiceRecorderDuration.MaxDuration(ms)` |
+| `bitrate` | 32 000 bps | Audio bitrate of the recorded voice file |
+| `samplingRate` | 16 000 Hz | Audio sampling rate |
+
+### Example: Allowing unlimited-length voice messages
+
+```kotlin
+SceytChatUIKit.config.voiceRecorderConfig = VoiceRecorderConfig(
+    maxDuration = VoiceRecorderDuration.Unlimited,
+    bitrate = 32_000,
+    simplingRate = 16_000
+)
+```
+
+<Note>
+The property in `VoiceRecorderConfig` is spelled `simplingRate` (matching the source). Set it the same way you would `samplingRate`.
+</Note>
+
+## Attachment Selection Limit
+
+The maximum number of files a user can attach in a single message is controlled by `attachmentSelectionLimit`. It accepts values from 1 to 50, with a default of 20.
+
+```kotlin
+SceytChatUIKit.config.attachmentSelectionLimit = 10
+```
+
+## File Transfer Service
+
+Attachment uploads run inside a bound foreground service accessed through `SceytChatUIKit.chatUIFacade.filesTransferService`. UIKit manages the service lifecycle automatically, but you can interact with it for monitoring or advanced control:
+
+```kotlin
+val transferService = SceytChatUIKit.chatUIFacade.filesTransferService
+```
+
+<Tip>
+The file transfer service notification — the persistent notification shown while an upload is in progress — is customizable through `SceytChatUIKit.notifications.fileTransferServiceNotification`. See the [Notification Style](/notifications/notification-customization) guide for details.
+</Tip>
+
+## Media Preview
+
+Full-screen media preview is opened through `Destination.MediaPreview`. Pass a `MediaPreviewParams.SingleAttachment` to view a single file with server-side pagination, or `MediaPreviewParams.PreloadedList` to browse a locally prepared list without extra network calls:
+
+```kotlin
+// Open a single attachment, load neighbors from the server
+SceytChatUIKit.navigator.navigate(
+    context = this,
+    destination = Destination.MediaPreview(
+        params = MediaPreviewParams.SingleAttachment(
+            attachment = attachment,
+            from = senderUser,
+            channelId = channel.id,
+            sourceView = imageView    // enables shared-element transition
+        )
+    )
+)
+
+// Open a preloaded list (e.g., gallery inside ChannelInfo)
+SceytChatUIKit.navigator.navigate(
+    context = this,
+    destination = Destination.MediaPreview(
+        params = MediaPreviewParams.PreloadedList(
+            items = attachments,
+            initialIndex = clickedIndex,
+            sourceView = imageView
+        )
+    )
+)
+```

@@ -1,0 +1,264 @@
+---
+title: "Channel List Component — Display Conversations in Android"
+sidebarTitle: "Channel List"
+description: "Use ChannelListFragment or ChannelListView to display and manage the user's conversation list. Learn embedding, click listeners, and style customization."
+---
+
+The Channel List component renders the signed-in user's full conversation list — direct messages, groups, and broadcast channels — with real-time updates, unread counts, pin indicators, mute badges, and delivery status icons. You can drop it into any screen as a self-contained `ChannelListFragment`, or embed only the raw `ChannelListView` inside your own layout when you need tighter control over the surrounding UI.
+
+## Two ways to use it
+
+<CardGroup cols={2}>
+  <Card title="ChannelListFragment" icon="layer-group">
+    A ready-to-use Fragment that includes a toolbar, search bar, FAB for starting new chats, and the channel list itself. Zero boilerplate.
+  </Card>
+  <Card title="ChannelListView" icon="rectangle-list">
+    A standalone custom `View` you place directly in any XML layout. Wire up your own ViewModel and toolbar while keeping the rich channel list UI.
+  </Card>
+</CardGroup>
+
+---
+
+## Using ChannelListFragment
+
+`ChannelListFragment` is the simplest path. Add it once and the component manages its own `ChannelsViewModel`, connection-status banner, global-search launcher, and new-channel FAB.
+
+<Steps>
+  <Step title="Add the Fragment in XML">
+    Declare a `FragmentContainerView` in your Activity layout and commit `ChannelListFragment` into it.
+
+    ```xml
+    <!-- res/layout/activity_main.xml -->
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/fragmentContainer"
+        android:name="com.sceyt.chatuikit.presentation.components.channel_list.channels.ChannelListFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+    ```
+  </Step>
+
+  <Step title="Or add it programmatically">
+    If you prefer to commit the Fragment in code (e.g., to pass a dynamic back-stack tag):
+
+    ```kotlin
+    import com.sceyt.chatuikit.presentation.components.channel_list.channels.ChannelListFragment
+
+    class MainActivity : AppCompatActivity() {
+        override fun onCreate(savedInstanceState: Bundle?) {
+            super.onCreate(savedInstanceState)
+            setContentView(R.layout.activity_main)
+
+            if (savedInstanceState == null) {
+                supportFragmentManager.commit {
+                    replace(
+                        R.id.fragmentContainer,
+                        ChannelListFragment(),
+                        "channel_list"
+                    )
+                }
+            }
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Subclass to customise behaviour">
+    Override the protected open methods to change what happens when the user taps the FAB or the search bar:
+
+    ```kotlin
+    class MyChannelListFragment : ChannelListFragment() {
+
+        override fun openStartChatActivity() {
+            // navigate to your own screen instead
+            SceytChatUIKit.navigator.navigate(
+                requireContext(),
+                Destination.StartChat()
+            )
+        }
+
+        override fun openGlobalSearch(sourceView: View?) {
+            SceytChatUIKit.navigator.navigate(
+                requireContext(),
+                Destination.GlobalSearch(sourceView)
+            )
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Using ChannelListView in a custom layout
+
+`ChannelListView` is a `FrameLayout` subclass. Place it in any XML layout, then bind your `ChannelsViewModel` to it.
+
+```xml
+<!-- res/layout/fragment_conversations.xml -->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.sceyt.chatuikit.presentation.components.channel_list.channels.ChannelListView
+        android:id="@+id/channelListView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+```
+
+Then bind the ViewModel in your Fragment:
+
+```kotlin
+import com.sceyt.chatuikit.presentation.components.channel_list.channels.viewmodel.ChannelsViewModel
+import com.sceyt.chatuikit.presentation.components.channel_list.channels.viewmodel.ChannelsViewModelFactory
+import com.sceyt.chatuikit.presentation.components.channel_list.channels.viewmodel.bind
+
+class ConversationsFragment : Fragment(R.layout.fragment_conversations) {
+
+    private val viewModel: ChannelsViewModel by viewModels {
+        ChannelsViewModelFactory()
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        val channelListView = view.findViewById<ChannelListView>(R.id.channelListView)
+        viewModel.bind(channelListView, viewLifecycleOwner)
+    }
+}
+```
+
+---
+
+## Click listeners
+
+`ChannelListView` exposes two listener interfaces you can override selectively — you only need to handle the events you care about.
+
+### ChannelClickListeners
+
+Handles taps on channel rows and avatars:
+
+```kotlin
+channelListView.setChannelClickListener(object : ChannelClickListeners() {
+    override fun onChannelClick(view: View, item: ChannelListItem.ChannelItem) {
+        // Default implementation opens Destination.Channel(item.channel)
+        // Override to add analytics or a custom transition
+        SceytChatUIKit.navigator.navigate(
+            view.context,
+            Destination.Channel(item.channel)
+        )
+    }
+
+    override fun onChannelLongClick(view: View, item: ChannelListItem.ChannelItem) {
+        // Default shows the actions popup/dialog for members
+    }
+
+    override fun onAvatarClick(view: View, item: ChannelListItem.ChannelItem) {
+        // Default delegates to onChannelClick
+    }
+})
+```
+
+### ChannelPopupClickListeners
+
+Handles the actions available from the long-press popup (pin, mute, mark as read, leave, delete):
+
+```kotlin
+channelListView.setCustomChannelPopupClickListener(object : ChannelPopupClickListenersImpl() {
+    override fun onPinClick(channel: SceytChannel) {
+        // called when the user taps "Pin" in the popup
+        super.onPinClick(channel)
+    }
+
+    override fun onMuteClick(channel: SceytChannel) {
+        // called when the user taps "Mute"
+        super.onMuteClick(channel)
+    }
+
+    override fun onLeaveChannelClick(channel: SceytChannel) {
+        // called when the user taps "Leave"
+        super.onLeaveChannelClick(channel)
+    }
+})
+```
+
+<Note>
+  Calling `super` on any `ChannelPopupClickListeners` method fires the default command (e.g., pin, mute) through the ViewModel. Skip `super` if you want to replace the default entirely.
+</Note>
+
+---
+
+## Custom ViewHolder factory
+
+To replace the per-row layout with your own design, extend `ChannelViewHolderFactory` and pass it to the view:
+
+```kotlin
+channelListView.setViewHolderFactory(MyChannelViewHolderFactory())
+```
+
+---
+
+## Style customization
+
+Appearance is controlled by two cooperating style objects: `ChannelListViewStyle` (controls the list container) and `ChannelItemStyle` (controls individual rows).
+
+### ChannelListViewStyle
+
+Set the global customizer **before** any `ChannelListView` is inflated, typically in `Application.onCreate()` or a `SceytChatUIKit` initialisation block:
+
+```kotlin
+import com.sceyt.chatuikit.styles.channel.ChannelListViewStyle
+
+ChannelListViewStyle.styleCustomizer = StyleCustomizer { context, style ->
+    style.copy(
+        backgroundColor = ContextCompat.getColor(context, R.color.my_background),
+        showChannelActionAsPopup = true
+    )
+}
+```
+
+To target a specific `ChannelListView` by its XML `android:id`:
+
+```kotlin
+ChannelListViewStyle.setStyleCustomizerForViewId(R.id.channelListView) { context, style ->
+    style.copy(showChannelActionAsPopup = false)
+}
+```
+
+### ChannelItemStyle
+
+`ChannelItemStyle` covers every visual aspect of a channel row: avatar, subject text, last-message preview, date, unread badge, delivery icons, pin and mute indicators, and more.
+
+```kotlin
+import com.sceyt.chatuikit.styles.channel.ChannelItemStyle
+
+ChannelItemStyle.styleCustomizer = StyleCustomizer { context, style ->
+    style.copy(
+        pinnedChannelBackgroundColor = ContextCompat.getColor(context, R.color.my_pinned_bg),
+        dividerColor = ContextCompat.getColor(context, R.color.my_divider)
+    )
+}
+```
+
+<Tip>
+  Both style customizers are `@JvmField` properties, so they are also accessible from Java without a Kotlin companion-object reference.
+</Tip>
+
+---
+
+## Navigation
+
+When the user taps a channel row, the default implementation navigates via `Destination.Channel`:
+
+```kotlin
+// What ChannelListView does internally on channel click:
+SceytChatUIKit.navigator.navigate(
+    context,
+    Destination.Channel(channel)
+)
+```
+
+This opens `ChannelActivity` — the full-screen message thread. To redirect taps to a custom activity, override `onChannelClick` in a `ChannelClickListeners` implementation and call `Destination.Channel.navigate(context)` with your own subclass, or use `SceytChatUIKit.navigator` to resolve a custom destination.

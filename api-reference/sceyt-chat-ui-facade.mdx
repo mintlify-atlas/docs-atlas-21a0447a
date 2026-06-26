@@ -1,0 +1,136 @@
+---
+title: "SceytChatUIFacade — Interactors and Core Services"
+sidebarTitle: "SceytChatUIFacade"
+description: "Reference for SceytChatUIFacade: access channel, message, user, and attachment interactors, token events, file transfer, and the sync manager."
+---
+
+`SceytChatUIFacade` is the internal wiring layer injected into `SceytChatUIKit.chatUIFacade`. It aggregates every domain interactor and core service into a single accessible object, allowing you to perform channel operations, message operations, user management, attachment handling, and more without needing to interact with Koin directly. You should always access this object through `SceytChatUIKit.chatUIFacade` rather than constructing it manually.
+
+**Package:** `com.sceyt.chatuikit`
+
+---
+
+## Interactors
+
+<ResponseField name="channelInteractor" type="ChannelInteractor">
+  Provides all channel-level operations: loading channel lists, creating and editing channels, muting, pinning, hiding, deleting, and managing unread counts and draft messages. See [ChannelInteractor](/api-reference/channel-interactor) for the full method reference.
+
+  ```kotlin
+  val channel = SceytChatUIKit.chatUIFacade.channelInteractor
+      .getChannelFromDb(channelId)
+  ```
+</ResponseField>
+
+<ResponseField name="messageInteractor" type="MessageInteractor">
+  Handles all message operations: paginated loading in both directions, sending, editing, deleting, searching, syncing, and sending markers. See [MessageInteractor](/api-reference/message-interactor) for the full method reference.
+
+  ```kotlin
+  val interactor = SceytChatUIKit.chatUIFacade.messageInteractor
+  ```
+</ResponseField>
+
+<ResponseField name="channelMemberInteractor" type="ChannelMemberInteractor">
+  Manages channel membership: loading members, adding or removing members, changing member roles, and banning/unbanning users from a channel.
+</ResponseField>
+
+<ResponseField name="userInteractor" type="UserInteractor">
+  Handles user profile operations: fetching users by ID, updating the current user's profile and avatar, setting presence state, muting global notifications, and managing the block list. See [UserInteractor](/api-reference/user-interactor) for the full method reference.
+
+  ```kotlin
+  val currentUser = SceytChatUIKit.chatUIFacade.userInteractor.getCurrentUser()
+  ```
+</ResponseField>
+
+<ResponseField name="attachmentInteractor" type="AttachmentInteractor">
+  Paginates through channel attachments by type (media, file, voice, link) and manages attachment metadata, transfer state, checksums, and link previews. See [AttachmentInteractor](/api-reference/attachment-interactor) for the full method reference.
+</ResponseField>
+
+<ResponseField name="messageReactionInteractor" type="MessageReactionInteractor">
+  Adds, removes, and fetches reactions on messages, and loads per-message reaction scores and voter lists.
+</ResponseField>
+
+<ResponseField name="messageMarkerInteractor" type="MessageMarkerInteractor">
+  Reads per-message marker data (delivered, read, played, etc.) for audit and receipt display.
+</ResponseField>
+
+<ResponseField name="channelInviteKeyInteractor" type="ChannelInviteKeyInteractor">
+  Generates, revokes, and validates channel invite keys used to construct shareable invite deep links.
+</ResponseField>
+
+---
+
+## Core Services
+
+<ResponseField name="sceytSyncManager" type="SceytSyncManager">
+  Orchestrates background synchronisation of channels and messages after a reconnection. Called automatically on connect when `SceytChatUIKit.config.syncChannelsAfterConnect` is `true`. You can also trigger or cancel a sync manually.
+
+  ```kotlin
+  SceytChatUIKit.chatUIFacade.sceytSyncManager.cancelSync()
+  ```
+</ResponseField>
+
+<ResponseField name="filesTransferService" type="FileTransferService">
+  Manages upload and download queues for message attachments. Tracks transfer progress, handles retries, and exposes per-attachment `TransferData` state.
+</ResponseField>
+
+---
+
+## Identity
+
+<ResponseField name="myId" type="String?">
+  The ID of the authenticated user as known to the facade. Resolves in order: cached `clientUserId` → `ClientWrapper.currentUser?.id` → persisted preference. Returns `null` if no user has ever authenticated on this device.
+
+  ```kotlin
+  val userId: String? = SceytChatUIKit.chatUIFacade.myId
+  ```
+</ResponseField>
+
+---
+
+## Token Events
+
+<ResponseField name="onTokenExpired" type="SharedFlow&lt;Unit&gt;">
+  Emits a `Unit` value whenever the server reports that the current authentication token has expired. Subscribe here to trigger a token-refresh flow and call `updateToken(...)`.
+
+  ```kotlin
+  SceytChatUIKit.chatUIFacade.onTokenExpired
+      .onEach { refreshAndUpdateToken() }
+      .launchIn(lifecycleScope)
+  ```
+</ResponseField>
+
+<ResponseField name="onTokenWillExpire" type="SharedFlow&lt;Unit&gt;">
+  Emits a `Unit` value shortly before the current authentication token expires, giving you a window to proactively refresh it before the connection is interrupted.
+
+  ```kotlin
+  SceytChatUIKit.chatUIFacade.onTokenWillExpire
+      .onEach { prefetchFreshToken() }
+      .launchIn(lifecycleScope)
+  ```
+</ResponseField>
+
+---
+
+## Methods
+
+<ResponseField name="updateToken" type="fun">
+  Sends a new authentication token to the server without requiring a full reconnect. Use this in response to `onTokenExpired` or `onTokenWillExpire`.
+
+  ```kotlin
+  SceytChatUIKit.chatUIFacade.updateToken(
+      token    = freshJwt,
+      listener = { success, errorMessage ->
+          if (!success) Log.e("Token", "Update failed: $errorMessage")
+      }
+  )
+  ```
+
+  <Expandable title="Parameters">
+    <ParamField path="token" type="String" required>
+      The new, valid authentication token to send to the server.
+    </ParamField>
+    <ParamField path="listener" type="((success: Boolean, errorMessage: String?) -> Unit)?">
+      An optional callback invoked on completion. `success` is `true` if the server accepted the token; on failure, `errorMessage` contains a human-readable description.
+    </ParamField>
+  </Expandable>
+</ResponseField>

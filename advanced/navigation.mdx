@@ -1,0 +1,286 @@
+---
+title: "Custom Navigation with SceytChatUIKitNavigator"
+sidebarTitle: "Navigation"
+description: "Override any UIKit screen destination using SceytChatUIKitNavigator and the Destination sealed class to integrate with your app's navigation stack."
+---
+
+The Sceyt Chat UIKit abstracts every screen transition through a `Destination` sealed class and a `SceytChatUIKitNavigator` interface. Rather than hard-coding `startActivity` calls throughout your codebase, UIKit calls `SceytChatUIKit.navigator.resolve(destination)` before launching any screen. Your app can intercept any route at that single point, replace the destination with a custom one, or wrap the navigation in your own back-stack management.
+
+## The `SceytChatUIKitNavigator` Interface
+
+```kotlin
+interface SceytChatUIKitNavigator {
+    fun resolve(destination: Destination): Destination = destination
+}
+```
+
+The default implementation (`DefaultSceytChatUIKitNavigator`) simply returns the destination unchanged. Override `resolve` to intercept specific destinations and return a modified or replaced one.
+
+To activate your navigator, assign it before the first screen is opened:
+
+```kotlin
+SceytChatUIKit.navigator = MyAppNavigator()
+```
+
+## Extension Functions
+
+Two extension functions on `SceytChatUIKitNavigator` drive all navigation calls inside UIKit:
+
+| Function | Usage |
+|---|---|
+| `navigate(context, destination)` | One-way navigation — calls `resolve`, then `destination.navigate(context)` |
+| `navigateForResult(context, launcher, destination)` | Result navigation — calls `resolve`, then launches via `ActivityResultLauncher` |
+
+## The `Destination` Sealed Class
+
+Every UIKit route is represented as a subclass of `Destination`. Each subclass owns a `createIntent(context: Context): Intent` factory and optional `createOptions(context: Context): ActivityOptionsCompat` for transitions.
+
+<Accordion title="Channel">
+Opens a chat channel conversation.
+
+```kotlin
+Destination.Channel(
+    channel: SceytChannel,
+    targetMessageId: Long? = null   // Scroll to this message on open
+)
+```
+</Accordion>
+
+<Accordion title="ChannelInfo">
+Opens channel details, optionally activating message search mode.
+
+```kotlin
+Destination.ChannelInfo(
+    channel: SceytChannel,
+    enableSearchMessages: Boolean = false
+)
+```
+</Accordion>
+
+<Accordion title="StartChat">
+Opens the UIKit start-chat entry screen (user picker for new conversations).
+
+```kotlin
+Destination.StartChat()
+```
+</Accordion>
+
+<Accordion title="CreateChannel">
+Opens the one-to-one channel creation flow.
+
+```kotlin
+Destination.CreateChannel()
+```
+</Accordion>
+
+<Accordion title="CreateGroup">
+Opens the group creation flow with a pre-selected list of members.
+
+```kotlin
+Destination.CreateGroup(members: List<SceytMember>)
+```
+</Accordion>
+
+<Accordion title="SelectUsers">
+Opens the generic user-selection screen driven by `SelectUsersPageArgs`.
+
+```kotlin
+Destination.SelectUsers(args: SelectUsersPageArgs)
+```
+</Accordion>
+
+<Accordion title="GlobalSearch">
+Opens the global message search screen. When an `Activity` context and a `sourceView` are provided, a shared-element transition is used automatically.
+
+```kotlin
+Destination.GlobalSearch(sourceView: View? = null)
+```
+</Accordion>
+
+<Accordion title="MessageInfo">
+Opens the delivery and read-receipt info screen for a specific message.
+
+```kotlin
+Destination.MessageInfo(
+    message: SceytMessage,
+    itemStyle: MessageItemStyle
+)
+```
+</Accordion>
+
+<Accordion title="Forward">
+Opens the forwarding flow for one or more messages.
+
+```kotlin
+Destination.Forward(messages: List<SceytMessage>)
+// Convenience vararg constructor:
+Destination.Forward(vararg messages: SceytMessage)
+```
+</Accordion>
+
+<Accordion title="PollResults">
+Opens the poll result detail screen for a message.
+
+```kotlin
+Destination.PollResults(message: SceytMessage)
+```
+</Accordion>
+
+<Accordion title="CreatePoll">
+Opens the poll creation screen for the target channel.
+
+```kotlin
+Destination.CreatePoll(channelId: ChannelId)
+```
+</Accordion>
+
+<Accordion title="InviteLink">
+Opens invite-link management for a channel.
+
+```kotlin
+Destination.InviteLink(channel: SceytChannel)
+```
+</Accordion>
+
+<Accordion title="ImagePreview">
+Opens a lightweight full-screen image preview.
+
+```kotlin
+Destination.ImagePreview(
+    imageUrl: String,
+    toolbarTitle: CharSequence
+)
+```
+</Accordion>
+
+<Accordion title="SelfDestructingMediaPreview">
+Opens the self-destructing media attachment viewer.
+
+```kotlin
+Destination.SelfDestructingMediaPreview(
+    message: SceytMessage,
+    attachment: SceytAttachment
+)
+```
+</Accordion>
+
+<Accordion title="SelfDestructingVoicePreview">
+Opens the self-destructing voice message player.
+
+```kotlin
+Destination.SelfDestructingVoicePreview(
+    message: SceytMessage,
+    attachment: SceytAttachment,
+    styleId: String
+)
+```
+</Accordion>
+
+<Accordion title="MediaPreview">
+Opens the full-screen media viewer. Accepts either a single attachment or a preloaded list for swipe-through browsing. Optionally provide a `sourceView` for a shared-element transition.
+
+```kotlin
+// Single attachment:
+Destination.MediaPreview(
+    params = MediaPreviewParams.SingleAttachment(
+        attachment = attachment,
+        from = senderUser,
+        channelId = channel.id,
+        reversed = false,
+        showInChatChannel = channel,  // optional
+        sourceView = thumbnailView    // optional, enables shared transition
+    )
+)
+
+// Preloaded list:
+Destination.MediaPreview(
+    params = MediaPreviewParams.PreloadedList(
+        items = attachmentList,
+        initialIndex = 0,
+        showInChatChannel = channel,
+        sourceView = thumbnailView
+    )
+)
+```
+</Accordion>
+
+<Accordion title="CameraMediaPreview">
+Opens the preview screen shown after capturing media with the built-in camera.
+
+```kotlin
+Destination.CameraMediaPreview(
+    filePath: String,
+    isVideo: Boolean
+)
+```
+</Accordion>
+
+<Accordion title="CustomCamera">
+Opens UIKit's built-in camera screen with an optional allowed-mode constraint.
+
+```kotlin
+Destination.CustomCamera(allowedMode: CameraState.AllowedMode? = null)
+```
+</Accordion>
+
+<Accordion title="AppRoot">
+Opens the host app's launcher / root activity. UIKit uses this as a safe fallback for task-root exits and notification entry points.
+
+```kotlin
+Destination.AppRoot(flags: Int = 0)
+```
+</Accordion>
+
+## Replacing a Destination
+
+The recommended pattern is to subclass the built-in destination (it is `open`) and override `createIntent` — then return your subclass from `resolve`.
+
+### Example: Open a Custom Channel Activity
+
+```kotlin
+import android.content.Context
+import android.content.Intent
+import com.sceyt.chatuikit.data.models.channels.SceytChannel
+import com.sceyt.chatuikit.navigation.Destination
+import com.sceyt.chatuikit.navigation.SceytChatUIKitNavigator
+
+class MyAppNavigator : SceytChatUIKitNavigator {
+
+    override fun resolve(destination: Destination): Destination {
+        return when (destination) {
+            is Destination.Channel -> MyChannelDestination(destination.channel, destination.targetMessageId)
+            else -> destination  // Keep all other destinations as-is
+        }
+    }
+}
+
+class MyChannelDestination(
+    channel: SceytChannel,
+    targetMessageId: Long? = null,
+) : Destination.Channel(channel, targetMessageId) {
+
+    override fun createIntent(context: Context): Intent {
+        // Replace with your own Activity
+        return Intent(context, MyCustomChannelActivity::class.java).apply {
+            putExtra("channel_id", channel.id)
+            targetMessageId?.let { putExtra("target_message_id", it) }
+        }
+    }
+}
+```
+
+Apply the navigator during application startup:
+
+```kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        SceytChatUIKit.initialize(this, apiUrl, appId, clientId)
+        SceytChatUIKit.navigator = MyAppNavigator()
+    }
+}
+```
+
+<Note>
+Override `createOptions(context)` in your custom destination if you also want to change the transition animation or use a shared-element transition.
+</Note>
